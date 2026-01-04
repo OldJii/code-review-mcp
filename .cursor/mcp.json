@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "code-review": {
+      "command": "python3",
+      "args": ["/Users/mac/Documents/cursor-ai-code-review/code_review_mcp.py"]
+    }
+  }
+}
