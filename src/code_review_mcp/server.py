@@ -16,6 +16,7 @@ from mcp.server.stdio import stdio_server
 from mcp.types import (
     TextContent,
     Tool,
+    ToolAnnotations,
 )
 
 from .providers import CodeReviewProvider, GitHubProvider, GitLabProvider
@@ -69,6 +70,7 @@ TOOLS = [
         description="Get PR/MR detailed information including title, description, author, and branches",
         inputSchema={
             "type": "object",
+            "title": "GetPRInfoInput",
             "properties": {
                 "provider": {
                     "type": "string",
@@ -89,6 +91,12 @@ TOOLS = [
                 },
             },
             "required": ["provider", "repo", "pr_id"],
+            "additionalProperties": False,
+        },
+        annotations={
+            "title": "Get PR/MR Info",
+            "readOnlyHint": True,
+            "openWorldHint": True,
         },
     ),
     Tool(
@@ -96,6 +104,7 @@ TOOLS = [
         description="Get PR/MR code changes (diff) with optional file extension filtering",
         inputSchema={
             "type": "object",
+            "title": "GetPRChangesInput",
             "properties": {
                 "provider": {
                     "type": "string",
@@ -121,6 +130,12 @@ TOOLS = [
                 },
             },
             "required": ["provider", "repo", "pr_id"],
+            "additionalProperties": False,
+        },
+        annotations={
+            "title": "Get PR/MR Changes",
+            "readOnlyHint": True,
+            "openWorldHint": True,
         },
     ),
     Tool(
@@ -128,6 +143,7 @@ TOOLS = [
         description="Add inline comment to a specific code line in PR/MR",
         inputSchema={
             "type": "object",
+            "title": "AddInlineCommentInput",
             "properties": {
                 "provider": {
                     "type": "string",
@@ -165,6 +181,14 @@ TOOLS = [
                 },
             },
             "required": ["provider", "repo", "pr_id", "file_path", "line", "line_type", "comment"],
+            "additionalProperties": False,
+        },
+        annotations={
+            "title": "Add Inline Comment",
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": False,
+            "openWorldHint": True,
         },
     ),
     Tool(
@@ -172,6 +196,7 @@ TOOLS = [
         description="Add a general comment to PR/MR",
         inputSchema={
             "type": "object",
+            "title": "AddPRCommentInput",
             "properties": {
                 "provider": {
                     "type": "string",
@@ -196,6 +221,14 @@ TOOLS = [
                 },
             },
             "required": ["provider", "repo", "pr_id", "comment"],
+            "additionalProperties": False,
+        },
+        annotations={
+            "title": "Add PR/MR Comment",
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": False,
+            "openWorldHint": True,
         },
     ),
     Tool(
@@ -203,6 +236,7 @@ TOOLS = [
         description="Batch add multiple inline comments and optionally a general comment",
         inputSchema={
             "type": "object",
+            "title": "BatchAddCommentsInput",
             "properties": {
                 "provider": {
                     "type": "string",
@@ -241,6 +275,14 @@ TOOLS = [
                 },
             },
             "required": ["provider", "repo", "pr_id", "inline_comments"],
+            "additionalProperties": False,
+        },
+        annotations={
+            "title": "Batch Add Comments",
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": False,
+            "openWorldHint": True,
         },
     ),
     Tool(
@@ -248,6 +290,7 @@ TOOLS = [
         description="Extract related PR/MR links from description text",
         inputSchema={
             "type": "object",
+            "title": "ExtractRelatedPRsInput",
             "properties": {
                 "provider": {
                     "type": "string",
@@ -264,6 +307,12 @@ TOOLS = [
                 },
             },
             "required": ["provider", "description"],
+            "additionalProperties": False,
+        },
+        annotations={
+            "title": "Extract Related PRs",
+            "readOnlyHint": True,
+            "openWorldHint": False,
         },
     ),
 ]
@@ -398,6 +447,7 @@ def run_sse(host: str = "0.0.0.0", port: int = 8000) -> None:
     from mcp.server.sse import SseServerTransport
     from starlette.applications import Starlette
     from starlette.routing import Route
+    from starlette.responses import JSONResponse
     import uvicorn
 
     sse = SseServerTransport("/messages")
@@ -417,10 +467,49 @@ def run_sse(host: str = "0.0.0.0", port: int = 8000) -> None:
         await sse.handle_post_message(request.scope, request.receive, request._send)
         return None
 
+    async def health_check(request: Any) -> JSONResponse:
+        return JSONResponse({"status": "healthy", "server": "code-review-mcp"})
+
     app = Starlette(
         routes=[
             Route("/sse", endpoint=handle_sse),
             Route("/messages", endpoint=handle_messages, methods=["POST"]),
+            Route("/health", endpoint=health_check, methods=["GET"]),
+        ]
+    )
+
+    uvicorn.run(app, host=host, port=port)
+
+
+def run_websocket(host: str = "0.0.0.0", port: int = 8000) -> None:
+    """Run the server using WebSocket transport."""
+    from mcp.server.websocket import websocket_server
+    from starlette.applications import Starlette
+    from starlette.routing import WebSocketRoute, Route
+    from starlette.responses import JSONResponse
+    from starlette.websockets import WebSocket
+    import uvicorn
+    import asyncio
+
+    async def handle_websocket(websocket: WebSocket) -> None:
+        await websocket.accept()
+        async with websocket_server(websocket._send, websocket._receive) as (
+            read_stream,
+            write_stream,
+        ):
+            await mcp.run(
+                read_stream,
+                write_stream,
+                mcp.create_initialization_options(),
+            )
+
+    async def health_check(request: Any) -> JSONResponse:
+        return JSONResponse({"status": "healthy", "server": "code-review-mcp"})
+
+    app = Starlette(
+        routes=[
+            WebSocketRoute("/ws", endpoint=handle_websocket),
+            Route("/health", endpoint=health_check, methods=["GET"]),
         ]
     )
 
@@ -431,26 +520,26 @@ def run_sse(host: str = "0.0.0.0", port: int = 8000) -> None:
 @click.option(
     "--transport",
     "-t",
-    type=click.Choice(["stdio", "sse"]),
+    type=click.Choice(["stdio", "sse", "websocket"]),
     default="stdio",
-    help="Transport mode: stdio (default) or sse",
+    help="Transport mode: stdio (default), sse, or websocket",
 )
 @click.option(
     "--host",
     "-h",
     default="0.0.0.0",
-    help="Host for SSE server (default: 0.0.0.0)",
+    help="Host for SSE/WebSocket server (default: 0.0.0.0)",
 )
 @click.option(
     "--port",
     "-p",
     default=8000,
     type=int,
-    help="Port for SSE server (default: 8000)",
+    help="Port for SSE/WebSocket server (default: 8000)",
 )
 @click.version_option()
 def main(
-    transport: Literal["stdio", "sse"],
+    transport: Literal["stdio", "sse", "websocket"],
     host: str,
     port: int,
 ) -> None:
@@ -467,6 +556,9 @@ def main(
         # Run with SSE transport:
         code-review-mcp --transport sse --port 8000
 
+        # Run with WebSocket transport:
+        code-review-mcp --transport websocket --port 8000
+
     Environment Variables:
 
         GITHUB_TOKEN: GitHub personal access token
@@ -477,8 +569,10 @@ def main(
 
     if transport == "stdio":
         asyncio.run(run_stdio())
-    else:
+    elif transport == "sse":
         run_sse(host, port)
+    else:
+        run_websocket(host, port)
 
 
 if __name__ == "__main__":

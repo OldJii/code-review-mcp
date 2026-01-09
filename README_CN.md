@@ -11,7 +11,7 @@
 ## ✨ 特性
 
 - 🔍 **多平台支持**：同时支持 GitHub 和 GitLab（包括私有部署）
-- 🚀 **多种运行方式**：支持 stdio、SSE 传输协议
+- 🚀 **多种运行方式**：支持 stdio、SSE、WebSocket 传输协议
 - 📦 **一键安装**：通过 `uvx` 或 `pip` 快速安装
 - 🐳 **容器化部署**：提供 Docker 镜像
 - ☁️ **云端部署**：支持 Smithery 一键部署
@@ -140,6 +140,25 @@ code-review-mcp --transport sse --port 8000
   "mcpServers": {
     "code-review": {
       "url": "http://your-server:8000/sse"
+    }
+  }
+}
+```
+
+### WebSocket 模式（远程部署）
+
+```bash
+# 启动 WebSocket 服务器
+code-review-mcp --transport websocket --port 8000
+```
+
+客户端配置：
+
+```json
+{
+  "mcpServers": {
+    "code-review": {
+      "url": "ws://your-server:8000/ws"
     }
   }
 }

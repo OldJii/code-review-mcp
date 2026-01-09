@@ -11,7 +11,7 @@ MCP (Model Context Protocol) server for code review. Enables AI assistants to re
 ## ✨ Features
 
 - 🔍 **Multi-platform**: Supports both GitHub and GitLab (including self-hosted)
-- 🚀 **Multiple Transports**: Supports stdio and SSE protocols
+- 🚀 **Multiple Transports**: Supports stdio, SSE, and WebSocket protocols
 - 📦 **Easy Install**: Quick install via `uvx` or `pip`
 - 🐳 **Containerized**: Docker image available
 - ☁️ **Cloud Deploy**: One-click Smithery deployment
@@ -140,6 +140,25 @@ Client configuration:
   "mcpServers": {
     "code-review": {
       "url": "http://your-server:8000/sse"
+    }
+  }
+}
+```
+
+### WebSocket Mode (Remote Deployment)
+
+```bash
+# Start WebSocket server
+code-review-mcp --transport websocket --port 8000
+```
+
+Client configuration:
+
+```json
+{
+  "mcpServers": {
+    "code-review": {
+      "url": "ws://your-server:8000/ws"
     }
   }
 }
