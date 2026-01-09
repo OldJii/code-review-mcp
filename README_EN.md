@@ -1,95 +1,188 @@
-# Cursor AI Code Review
+# Code Review MCP Server
 
 English | [中文](README.md)
 
-MCP (Model Context Protocol) based code review tool that enables Cursor to read GitHub/GitLab PR/MR and submit review comments.
+[![PyPI version](https://badge.fury.io/py/code-review-mcp.svg)](https://badge.fury.io/py/code-review-mcp)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 
-## Project Structure
+MCP (Model Context Protocol) server for code review. Enables AI assistants to review GitHub/GitLab Pull Requests and Merge Requests.
 
-```
-cursor-ai-code-review/
-├── code_review_mcp.py           # MCP server
-└── .cursor/rules/
-    ├── code-review.mdc          # Review guidelines (Chinese)
-    └── code-review-en.mdc       # Review guidelines (English)
-```
+## ✨ Features
 
-## Installation
+- 🔍 **Multi-platform**: Supports both GitHub and GitLab (including self-hosted)
+- 🚀 **Multiple Transports**: Supports stdio and SSE protocols
+- 📦 **Easy Install**: Quick install via `uvx` or `pip`
+- 🐳 **Containerized**: Docker image available
+- ☁️ **Cloud Deploy**: One-click Smithery deployment
+- 🔒 **Security First**: Environment variable configuration, no data persistence
 
-### 1. Download
+## 🚀 Quick Start
+
+### Option 1: Using uvx (Recommended)
 
 ```bash
-git clone https://github.com/user/cursor-ai-code-review.git
+# Run directly, no installation needed
+uvx code-review-mcp
 ```
 
-### 2. Authentication
+### Option 2: Using pip
+
+```bash
+pip install code-review-mcp
+
+# Run the server
+code-review-mcp
+```
+
+### Option 3: From Source
+
+```bash
+git clone https://github.com/OldJii/code-review-mcp.git
+cd code-review-mcp
+pip install -e .
+code-review-mcp
+```
+
+## 🔧 Configuration
+
+### Environment Variables
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `GITHUB_TOKEN` | GitHub personal access token | When using GitHub |
+| `GITLAB_TOKEN` | GitLab personal access token | When using GitLab |
+| `GITLAB_HOST` | GitLab host URL | For self-hosted (default: gitlab.com) |
+
+### Getting Tokens
 
 **GitHub**
 
 ```bash
+# Option 1: Using gh CLI (Recommended)
 brew install gh
 gh auth login
+
+# Option 2: Manual Token Creation
+# Visit https://github.com/settings/tokens
+# Create Personal Access Token with 'repo' scope
+export GITHUB_TOKEN="your-token-here"
 ```
 
 **GitLab**
 
 ```bash
+# Option 1: Using glab CLI (Recommended)
 brew install glab
 glab auth login
-```
 
-For self-hosted GitLab:
-
-```bash
+# For self-hosted GitLab
 glab auth login --hostname gitlab.yourcompany.com
+
+# Option 2: Manual Token Creation
+# Visit GitLab -> Settings -> Access Tokens
+# Create token with 'api' scope
+export GITLAB_TOKEN="your-token-here"
+export GITLAB_HOST="gitlab.yourcompany.com"  # For self-hosted
 ```
 
-### 3. Configure MCP
+## 📱 Client Configuration
 
-Edit `~/.cursor/mcp.json` (global config, applies to all projects):
+### Cursor
+
+Edit `~/.cursor/mcp.json`:
 
 ```json
 {
   "mcpServers": {
     "code-review": {
-      "command": "python3",
-      "args": ["/path/to/cursor-ai-code-review/code_review_mcp.py"]
+      "command": "uvx",
+      "args": ["code-review-mcp"],
+      "env": {
+        "GITHUB_TOKEN": "your-github-token",
+        "GITLAB_TOKEN": "your-gitlab-token"
+      }
     }
   }
 }
 ```
 
-Replace `/path/to/` with the actual path.
+### Claude Desktop
 
-### 4. Configure Review Rules (Optional)
+Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
 
-Copy the rules from `.cursor/rules/` to your project:
+```json
+{
+  "mcpServers": {
+    "code-review": {
+      "command": "uvx",
+      "args": ["code-review-mcp"],
+      "env": {
+        "GITHUB_TOKEN": "your-github-token",
+        "GITLAB_TOKEN": "your-gitlab-token"
+      }
+    }
+  }
+}
+```
+
+### SSE Mode (Remote Deployment)
 
 ```bash
-cp -r /path/to/cursor-ai-code-review/.cursor/rules your-project/.cursor/
+# Start SSE server
+code-review-mcp --transport sse --port 8000
 ```
 
-Review rules are project-level configuration and need to be configured separately for each project.
+Client configuration:
 
-## Usage
-
-Chat with Cursor:
-
+```json
+{
+  "mcpServers": {
+    "code-review": {
+      "url": "http://your-server:8000/sse"
+    }
+  }
+}
 ```
-Review https://github.com/owner/repo/pull/123
+
+## 🐳 Docker Deployment
+
+### Build Image
+
+```bash
+docker build -t code-review-mcp .
 ```
 
-## MCP Tools
+### Run Container
 
-### Get Information
+**stdio mode**
+
+```bash
+docker run -i --rm \
+  -e GITHUB_TOKEN="your-token" \
+  code-review-mcp
+```
+
+**SSE mode**
+
+```bash
+docker run -d --rm \
+  -e GITHUB_TOKEN="your-token" \
+  -p 8000:8000 \
+  code-review-mcp --transport sse
+```
+
+## 🔨 MCP Tools
+
+### Information Retrieval
 
 | Tool | Description |
 |------|-------------|
-| `get_pr_info` | Get PR/MR title, description, branches, etc. |
+| `get_pr_info` | Get PR/MR details (title, description, branches) |
 | `get_pr_changes` | Get code changes (diff), supports file type filtering |
 | `extract_related_prs` | Extract related PR/MR links from description |
 
-### Add Comments
+### Adding Comments
 
 | Tool | Description |
 |------|-------------|
@@ -97,33 +190,9 @@ Review https://github.com/owner/repo/pull/123
 | `add_pr_comment` | Add general comment |
 | `batch_add_comments` | Batch add comments (inline + general) |
 
-### Parameters
+## 💬 Usage Examples
 
-**Common Parameters**
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `provider` | string | Yes | `github` or `gitlab` |
-| `repo` | string | Yes | Repository path, e.g., `owner/repo` |
-| `pr_id` | integer | Yes | PR/MR number |
-| `host` | string | No | GitLab host (for self-hosted instances) |
-
-**get_pr_changes**
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `file_extensions` | array | No | Filter by extension, e.g., `[".py", ".js"]` |
-
-**add_inline_comment**
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `file_path` | string | Yes | File path |
-| `line` | integer | Yes | Line number |
-| `line_type` | string | Yes | `old` (deleted) or `new` (added) |
-| `comment` | string | Yes | Comment content |
-
-## Usage Examples
+Chat with Cursor or Claude:
 
 **Review GitHub PR**
 
@@ -137,34 +206,93 @@ Review https://github.com/facebook/react/pull/12345
 Review https://gitlab.com/group/project/-/merge_requests/678
 ```
 
-**Review self-hosted GitLab MR**
+**Review Self-hosted GitLab MR**
 
 ```
 Review https://gitlab.yourcompany.com/team/project/-/merge_requests/90
 ```
 
-**Review only specific file types**
+**Review Only Specific File Types**
 
 ```
 Review this PR, only check .py and .js files:
 https://github.com/owner/repo/pull/123
 ```
 
-## Custom Review Rules
+## 🧪 Debugging & Testing
 
-The included `.cursor/rules/code-review.mdc` is a general template. Copy to your project and modify as needed:
+### Using MCP Inspector
 
+```bash
+# Run with MCP Inspector
+npx @modelcontextprotocol/inspector uvx code-review-mcp
+```
+
+This launches a web interface where you can:
+- View all available tools
+- Manually call tools and inspect results
+- Debug parameters and responses
+
+### Local Development
+
+```bash
+# Clone repository
+git clone https://github.com/OldJii/code-review-mcp.git
+cd code-review-mcp
+
+# Install dev dependencies
+pip install -e ".[dev]"
+
+# Run tests
+pytest
+
+# Debug with Inspector
+npx @modelcontextprotocol/inspector python -m code_review_mcp.server
+```
+
+## 📁 Project Structure
+
+```
+code-review-mcp/
+├── src/
+│   └── code_review_mcp/
+│       ├── __init__.py      # Package entry
+│       ├── server.py        # MCP server main logic
+│       └── providers.py     # GitHub/GitLab providers
+├── .cursor/rules/           # Cursor review rules
+├── pyproject.toml           # Project config & PyPI publishing
+├── Dockerfile               # Docker build file
+├── smithery.yaml            # Smithery deployment config
+├── CHANGELOG.md             # Changelog
+├── CONTRIBUTING.md          # Contributing guide
+└── README.md                # Documentation
+```
+
+## 🎯 Custom Review Rules
+
+The included `.cursor/rules/code-review.mdc` is a general template. Copy to your project and customize:
+
+```bash
+cp -r .cursor/rules your-project/.cursor/
+```
+
+Customizable items:
 - Priority definitions
-- Checklist
+- Checklist items
 - Comment format
 - Deduplication rules
 
-For language or framework specific rules, use the template as a base and ask AI to generate a customized version.
+## 🤝 Contributing
 
-Language versions:
-- `code-review.mdc` - Chinese
-- `code-review-en.mdc` - English
+Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
-## License
+## 📄 License
 
-MIT
+[MIT](LICENSE)
+
+## 🔗 Related Links
+
+- [MCP Protocol Documentation](https://modelcontextprotocol.io/)
+- [Smithery Platform](https://smithery.ai/)
+- [Cursor Editor](https://cursor.sh/)
+- [Claude Desktop](https://claude.ai/desktop)

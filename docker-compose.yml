@@ -1,0 +1,20 @@
+# Docker Compose for Code Review MCP Server
+# Usage: docker compose up
+
+services:
+  code-review-mcp:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - GITLAB_TOKEN=${GITLAB_TOKEN:-}
+      - GITLAB_HOST=${GITLAB_HOST:-gitlab.com}
+    command: ["--transport", "sse", "--port", "8000"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s

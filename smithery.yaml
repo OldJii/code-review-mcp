@@ -1,0 +1,73 @@
+# Smithery deployment configuration
+# https://smithery.ai/docs/config
+
+name: code-review-mcp
+title: Code Review MCP Server
+description: |
+  MCP Server for GitHub/GitLab code review. 
+  Enables AI assistants to review pull requests and merge requests,
+  add inline comments, and provide comprehensive code reviews.
+
+icon: 🔍
+
+# Repository information
+repository:
+  type: github
+  url: https://github.com/OldJii/code-review-mcp
+
+# Build configuration
+build:
+  dockerfile: Dockerfile
+
+# Server configuration
+server:
+  transport: sse
+  port: 8000
+  healthcheck:
+    path: /health
+    interval: 30s
+    timeout: 10s
+
+# Environment variables (required by the server)
+env:
+  - name: GITHUB_TOKEN
+    description: GitHub personal access token for API access
+    required: false
+    secret: true
+  - name: GITLAB_TOKEN
+    description: GitLab personal access token for API access
+    required: false
+    secret: true
+  - name: GITLAB_HOST
+    description: GitLab host for self-hosted instances
+    required: false
+    default: gitlab.com
+
+# Tool definitions for documentation
+tools:
+  - name: get_pr_info
+    description: Get PR/MR detailed information
+  - name: get_pr_changes
+    description: Get PR/MR code changes (diff)
+  - name: add_inline_comment
+    description: Add inline comment to specific code line
+  - name: add_pr_comment
+    description: Add general PR/MR comment
+  - name: batch_add_comments
+    description: Batch add multiple comments
+  - name: extract_related_prs
+    description: Extract related PR/MR links from description
+
+# Categories for discoverability
+categories:
+  - developer-tools
+  - code-review
+  - git
+  - github
+  - gitlab
+
+# License
+license: MIT
+
+# Author
+author: Code Review MCP Contributors
