@@ -14,6 +14,7 @@ from mcp.server.stdio import stdio_server
 from mcp.types import (
     TextContent,
     Tool,
+    ToolAnnotations,
 )
 
 from .providers import CodeReviewProvider, GitHubProvider, GitLabProvider
@@ -90,11 +91,11 @@ TOOLS = [
             "required": ["provider", "repo", "pr_id"],
             "additionalProperties": False,
         },
-        annotations={
-            "title": "Get PR/MR Info",
-            "readOnlyHint": True,
-            "openWorldHint": True,
-        },
+        annotations=ToolAnnotations(
+            title="Get PR/MR Info",
+            readOnlyHint=True,
+            openWorldHint=True,
+        ),
     ),
     Tool(
         name="get_pr_changes",
@@ -129,11 +130,11 @@ TOOLS = [
             "required": ["provider", "repo", "pr_id"],
             "additionalProperties": False,
         },
-        annotations={
-            "title": "Get PR/MR Changes",
-            "readOnlyHint": True,
-            "openWorldHint": True,
-        },
+        annotations=ToolAnnotations(
+            title="Get PR/MR Changes",
+            readOnlyHint=True,
+            openWorldHint=True,
+        ),
     ),
     Tool(
         name="add_inline_comment",
@@ -180,13 +181,13 @@ TOOLS = [
             "required": ["provider", "repo", "pr_id", "file_path", "line", "line_type", "comment"],
             "additionalProperties": False,
         },
-        annotations={
-            "title": "Add Inline Comment",
-            "readOnlyHint": False,
-            "destructiveHint": False,
-            "idempotentHint": False,
-            "openWorldHint": True,
-        },
+        annotations=ToolAnnotations(
+            title="Add Inline Comment",
+            readOnlyHint=False,
+            destructiveHint=False,
+            idempotentHint=False,
+            openWorldHint=True,
+        ),
     ),
     Tool(
         name="add_pr_comment",
@@ -220,13 +221,13 @@ TOOLS = [
             "required": ["provider", "repo", "pr_id", "comment"],
             "additionalProperties": False,
         },
-        annotations={
-            "title": "Add PR/MR Comment",
-            "readOnlyHint": False,
-            "destructiveHint": False,
-            "idempotentHint": False,
-            "openWorldHint": True,
-        },
+        annotations=ToolAnnotations(
+            title="Add PR/MR Comment",
+            readOnlyHint=False,
+            destructiveHint=False,
+            idempotentHint=False,
+            openWorldHint=True,
+        ),
     ),
     Tool(
         name="batch_add_comments",
@@ -274,13 +275,13 @@ TOOLS = [
             "required": ["provider", "repo", "pr_id", "inline_comments"],
             "additionalProperties": False,
         },
-        annotations={
-            "title": "Batch Add Comments",
-            "readOnlyHint": False,
-            "destructiveHint": False,
-            "idempotentHint": False,
-            "openWorldHint": True,
-        },
+        annotations=ToolAnnotations(
+            title="Batch Add Comments",
+            readOnlyHint=False,
+            destructiveHint=False,
+            idempotentHint=False,
+            openWorldHint=True,
+        ),
     ),
     Tool(
         name="extract_related_prs",
@@ -306,11 +307,11 @@ TOOLS = [
             "required": ["provider", "description"],
             "additionalProperties": False,
         },
-        annotations={
-            "title": "Extract Related PRs",
-            "readOnlyHint": True,
-            "openWorldHint": False,
-        },
+        annotations=ToolAnnotations(
+            title="Extract Related PRs",
+            readOnlyHint=True,
+            openWorldHint=False,
+        ),
     ),
 ]
 
@@ -326,15 +327,17 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     """Handle tool calls."""
     import json
 
+    result: dict[str, Any]
+
     try:
         # extract_related_prs doesn't need authentication
         if name == "extract_related_prs":
-            result = extract_related_prs(
+            extracted = extract_related_prs(
                 arguments.get("provider", "github"),
                 arguments["description"],
                 arguments.get("host"),
             )
-            return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False))]
+            return [TextContent(type="text", text=json.dumps(extracted, ensure_ascii=False))]
 
         # All other tools need provider authentication
         provider_type = arguments.get("provider", "github")
@@ -369,7 +372,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             )
 
         elif name == "batch_add_comments":
-            results: dict[str, Any] = {
+            batch_results: dict[str, Any] = {
                 "inline_success": 0,
                 "inline_failed": 0,
                 "pr_comment_success": False,
@@ -387,10 +390,10 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                         comment_data["comment"],
                     )
                     if res.get("success"):
-                        results["inline_success"] += 1
+                        batch_results["inline_success"] += 1
                     else:
-                        results["inline_failed"] += 1
-                        results["errors"].append(
+                        batch_results["inline_failed"] += 1
+                        batch_results["errors"].append(
                             {
                                 "file": comment_data["file_path"],
                                 "line": comment_data["line"],
@@ -398,8 +401,8 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                             }
                         )
                 except Exception as e:
-                    results["inline_failed"] += 1
-                    results["errors"].append(
+                    batch_results["inline_failed"] += 1
+                    batch_results["errors"].append(
                         {
                             "file": comment_data.get("file_path"),
                             "error": str(e),
@@ -413,11 +416,11 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                         arguments["pr_id"],
                         arguments["pr_comment"],
                     )
-                    results["pr_comment_success"] = res.get("success", False)
+                    batch_results["pr_comment_success"] = res.get("success", False)
                 except Exception as e:
-                    results["errors"].append({"type": "pr_comment", "error": str(e)})
+                    batch_results["errors"].append({"type": "pr_comment", "error": str(e)})
 
-            result = results
+            result = batch_results
 
         else:
             return [TextContent(type="text", text=f"Unknown tool: {name}")]
@@ -491,7 +494,7 @@ def run_websocket(host: str = "0.0.0.0", port: int = 8000) -> None:
 
     async def handle_websocket(websocket: WebSocket) -> None:
         await websocket.accept()
-        async with websocket_server(websocket._send, websocket._receive) as (
+        async with websocket_server(websocket.scope, websocket.receive, websocket.send) as (
             read_stream,
             write_stream,
         ):

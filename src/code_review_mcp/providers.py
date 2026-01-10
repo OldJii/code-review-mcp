@@ -106,7 +106,8 @@ class GitLabProvider(CodeReviewProvider):
             else:
                 response = await self.client.post(url, json=data)
             response.raise_for_status()
-            return response.json()
+            result: dict[str, Any] | list[Any] = response.json()
+            return result
         except httpx.HTTPError:
             return None
 
@@ -324,7 +325,8 @@ class GitHubProvider(CodeReviewProvider):
             else:
                 response = await self.client.post(endpoint, json=data)
             response.raise_for_status()
-            return response.json()
+            result: dict[str, Any] | list[Any] = response.json()
+            return result
         except httpx.HTTPError:
             return None
 
