@@ -33,6 +33,9 @@ pip install code-review-mcp
 
 # 运行服务器
 code-review-mcp
+
+# （可选）安装 Cursor 规则到你的项目
+code-review-mcp init-rules
 ```
 
 ### 方式 3：从源码运行
@@ -276,9 +279,12 @@ code-review-mcp/
 ├── src/
 │   └── code_review_mcp/
 │       ├── __init__.py      # 包入口
+│       ├── cli.py           # CLI 命令（init-rules 等）
 │       ├── server.py        # MCP 服务器主逻辑
-│       └── providers.py     # GitHub/GitLab 提供者
-├── .cursor/rules/           # Cursor 审查规范
+│       ├── providers.py     # GitHub/GitLab 提供者
+│       └── rules/           # 内置 Cursor 规则
+│           ├── code-review.mdc
+│           └── code-review-en.mdc
 ├── pyproject.toml           # 项目配置 & PyPI 发布
 ├── Dockerfile               # Docker 构建文件
 ├── smithery.yaml            # Smithery 部署配置
@@ -287,15 +293,32 @@ code-review-mcp/
 └── README.md                # 项目文档
 ```
 
-## 🎯 自定义审查规范
+## 🎯 Cursor 规则（推荐）
 
-项目附带的 `.cursor/rules/code-review.mdc` 是通用模板。复制到你的项目中并根据需要修改：
+本包内置了 Cursor IDE 的代码审查规则，一条命令即可安装到你的项目：
 
 ```bash
-cp -r .cursor/rules your-project/.cursor/
+# 安装规则到当前项目
+code-review-mcp init-rules
+
+# 安装到指定目录
+code-review-mcp init-rules --target /path/to/project
+
+# 覆盖已存在的规则
+code-review-mcp init-rules --force
+
+# 查看可用规则
+code-review-mcp list-rules
 ```
 
-可自定义的内容：
+安装后，规则会出现在项目的 `.cursor/rules/` 目录：
+- `code-review.mdc` - 中文版
+- `code-review-en.mdc` - 英文版
+
+### 自定义规则
+
+安装的规则是通用模板，你可以根据项目需要自定义：
+
 - 优先级定义
 - 检查清单
 - 评论格式

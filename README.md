@@ -33,6 +33,9 @@ pip install code-review-mcp
 
 # Run the server
 code-review-mcp
+
+# (Optional) Install Cursor rules to your project
+code-review-mcp init-rules
 ```
 
 ### Option 3: From Source
@@ -276,9 +279,12 @@ code-review-mcp/
 ├── src/
 │   └── code_review_mcp/
 │       ├── __init__.py      # Package entry
+│       ├── cli.py           # CLI commands (init-rules, etc.)
 │       ├── server.py        # MCP server main logic
-│       └── providers.py     # GitHub/GitLab providers
-├── .cursor/rules/           # Cursor review rules
+│       ├── providers.py     # GitHub/GitLab providers
+│       └── rules/           # Bundled Cursor rules
+│           ├── code-review.mdc
+│           └── code-review-en.mdc
 ├── pyproject.toml           # Project config & PyPI publishing
 ├── Dockerfile               # Docker build file
 ├── smithery.yaml            # Smithery deployment config
@@ -287,15 +293,32 @@ code-review-mcp/
 └── README.md                # Documentation
 ```
 
-## 🎯 Custom Review Rules
+## 🎯 Cursor Rules (Recommended)
 
-The included `.cursor/rules/code-review.mdc` is a general template. Copy to your project and customize:
+This package includes built-in code review rules for Cursor IDE. Install them to your project with one command:
 
 ```bash
-cp -r .cursor/rules your-project/.cursor/
+# Install rules to current project
+code-review-mcp init-rules
+
+# Install to a specific directory
+code-review-mcp init-rules --target /path/to/project
+
+# Overwrite existing rules
+code-review-mcp init-rules --force
+
+# List available rules
+code-review-mcp list-rules
 ```
 
-Customizable items:
+After installation, the rules will be available in your project's `.cursor/rules/` directory:
+- `code-review.mdc` - Chinese version
+- `code-review-en.mdc` - English version
+
+### Customizing Rules
+
+The installed rules are general templates. You can customize them for your project:
+
 - Priority definitions
 - Checklist items
 - Comment format
