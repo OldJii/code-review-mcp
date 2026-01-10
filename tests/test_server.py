@@ -1,8 +1,6 @@
 """Tests for Code Review MCP Server."""
 
-import pytest
-
-from code_review_mcp.server import extract_related_prs, TOOLS
+from code_review_mcp.server import TOOLS, extract_related_prs
 
 
 class TestExtractRelatedPRs:

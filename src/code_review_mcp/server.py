@@ -5,9 +5,7 @@ Main MCP server implementation using the official MCP SDK.
 Supports stdio, SSE, and WebSocket transports.
 """
 
-import os
 import re
-import sys
 from typing import Any, Literal
 
 import click
@@ -16,7 +14,6 @@ from mcp.server.stdio import stdio_server
 from mcp.types import (
     TextContent,
     Tool,
-    ToolAnnotations,
 )
 
 from .providers import CodeReviewProvider, GitHubProvider, GitLabProvider
@@ -393,17 +390,21 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                         results["inline_success"] += 1
                     else:
                         results["inline_failed"] += 1
-                        results["errors"].append({
-                            "file": comment_data["file_path"],
-                            "line": comment_data["line"],
-                            "error": res.get("error"),
-                        })
+                        results["errors"].append(
+                            {
+                                "file": comment_data["file_path"],
+                                "line": comment_data["line"],
+                                "error": res.get("error"),
+                            }
+                        )
                 except Exception as e:
                     results["inline_failed"] += 1
-                    results["errors"].append({
-                        "file": comment_data.get("file_path"),
-                        "error": str(e),
-                    })
+                    results["errors"].append(
+                        {
+                            "file": comment_data.get("file_path"),
+                            "error": str(e),
+                        }
+                    )
 
             if arguments.get("pr_comment"):
                 try:
@@ -444,18 +445,16 @@ async def run_stdio() -> None:
 
 def run_sse(host: str = "0.0.0.0", port: int = 8000) -> None:
     """Run the server using SSE transport."""
+    import uvicorn
     from mcp.server.sse import SseServerTransport
     from starlette.applications import Starlette
-    from starlette.routing import Route
     from starlette.responses import JSONResponse
-    import uvicorn
+    from starlette.routing import Route
 
     sse = SseServerTransport("/messages")
 
     async def handle_sse(request: Any) -> Any:
-        async with sse.connect_sse(
-            request.scope, request.receive, request._send
-        ) as streams:
+        async with sse.connect_sse(request.scope, request.receive, request._send) as streams:
             await mcp.run(
                 streams[0],
                 streams[1],
@@ -483,13 +482,12 @@ def run_sse(host: str = "0.0.0.0", port: int = 8000) -> None:
 
 def run_websocket(host: str = "0.0.0.0", port: int = 8000) -> None:
     """Run the server using WebSocket transport."""
+    import uvicorn
     from mcp.server.websocket import websocket_server
     from starlette.applications import Starlette
-    from starlette.routing import WebSocketRoute, Route
     from starlette.responses import JSONResponse
+    from starlette.routing import Route, WebSocketRoute
     from starlette.websockets import WebSocket
-    import uvicorn
-    import asyncio
 
     async def handle_websocket(websocket: WebSocket) -> None:
         await websocket.accept()

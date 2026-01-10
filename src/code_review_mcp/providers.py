@@ -144,15 +144,16 @@ class GitLabProvider(CodeReviewProvider):
         filtered_changes = []
         for change in changes.get("changes", []):
             file_path = change.get("new_path", "")
-            if file_extensions:
-                if not any(file_path.endswith(ext) for ext in file_extensions):
-                    continue
-            filtered_changes.append({
-                "file_path": file_path,
-                "diff": change.get("diff", ""),
-                "new_file": change.get("new_file", False),
-                "deleted_file": change.get("deleted_file", False),
-            })
+            if file_extensions and not any(file_path.endswith(ext) for ext in file_extensions):
+                continue
+            filtered_changes.append(
+                {
+                    "file_path": file_path,
+                    "diff": change.get("diff", ""),
+                    "new_file": change.get("new_file", False),
+                    "deleted_file": change.get("deleted_file", False),
+                }
+            )
 
         return {
             "title": changes.get("title"),
@@ -160,9 +161,7 @@ class GitLabProvider(CodeReviewProvider):
             "total_files": len(filtered_changes),
         }
 
-    def _find_line_code(
-        self, diff: str, target_line: int, line_type: str, head_sha: str
-    ) -> str:
+    def _find_line_code(self, diff: str, target_line: int, line_type: str, head_sha: str) -> str:
         """Find line_code from diff for GitLab API."""
         lines = diff.split("\n")
         old_line = 0
@@ -253,7 +252,11 @@ class GitLabProvider(CodeReviewProvider):
                 "url": f"{mr_info.get('web_url')}#note_{note_id}",
             }
 
-        error_msg = result.get("message", "Failed to add comment") if isinstance(result, dict) else "Failed to add comment"
+        error_msg = (
+            result.get("message", "Failed to add comment")
+            if isinstance(result, dict)
+            else "Failed to add comment"
+        )
         return {"success": False, "error": error_msg}
 
     async def add_pr_comment(self, repo: str, pr_id: int, comment: str) -> dict[str, Any]:
@@ -361,16 +364,17 @@ class GitHubProvider(CodeReviewProvider):
         filtered_changes = []
         for file in files:
             file_path = file.get("filename", "")
-            if file_extensions:
-                if not any(file_path.endswith(ext) for ext in file_extensions):
-                    continue
-            filtered_changes.append({
-                "file_path": file_path,
-                "diff": file.get("patch", ""),
-                "new_file": file.get("status") == "added",
-                "deleted_file": file.get("status") == "removed",
-                "sha": file.get("sha"),
-            })
+            if file_extensions and not any(file_path.endswith(ext) for ext in file_extensions):
+                continue
+            filtered_changes.append(
+                {
+                    "file_path": file_path,
+                    "diff": file.get("patch", ""),
+                    "new_file": file.get("status") == "added",
+                    "deleted_file": file.get("status") == "removed",
+                    "sha": file.get("sha"),
+                }
+            )
 
         pr_info = await self._call_api(f"/repos/{repo}/pulls/{pr_id}")
 
@@ -415,7 +419,11 @@ class GitHubProvider(CodeReviewProvider):
                 "url": result.get("html_url"),
             }
 
-        error_msg = result.get("message", "Failed to add comment") if isinstance(result, dict) else "Failed to add comment"
+        error_msg = (
+            result.get("message", "Failed to add comment")
+            if isinstance(result, dict)
+            else "Failed to add comment"
+        )
         return {"success": False, "error": error_msg}
 
     async def add_pr_comment(self, repo: str, pr_id: int, comment: str) -> dict[str, Any]:
