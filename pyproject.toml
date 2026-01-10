@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "code-review-mcp"
-version = "1.0.0"
+version = "1.1.0"
 description = "MCP Server for GitHub/GitLab code review - enables AI assistants to review pull requests and merge requests"
 readme = "README.md"
 license = "MIT"
@@ -65,10 +65,14 @@ Issues = "https://github.com/OldJii/code-review-mcp/issues"
 Changelog = "https://github.com/OldJii/code-review-mcp/blob/main/CHANGELOG.md"
 
 [project.scripts]
-code-review-mcp = "code_review_mcp.server:main"
+code-review-mcp = "code_review_mcp.cli:cli"
+
+[project.entry-points."code_review_mcp.commands"]
+server = "code_review_mcp.server:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/code_review_mcp"]
+include = ["src/code_review_mcp/rules/*.mdc"]
 
 [tool.hatch.build.targets.sdist]
 include = [

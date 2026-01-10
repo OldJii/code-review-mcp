@@ -7,16 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2025-01-10
+
 ### Added
 
-- WebSocket transport support (`--transport websocket`)
-- Tool annotations with `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`
-- Health check endpoint (`/health`) for SSE and WebSocket modes
-- Schema `title` and `additionalProperties` for better tool documentation
+- New `init-rules` command to install Cursor rules to your project
+- New `list-rules` command to show available rules
+- Bundled code review rules (Chinese and English versions) in the package
+- Users can now run `code-review-mcp init-rules` to set up Cursor rules automatically
 
 ### Changed
 
-- Improved tool definitions with MCP best practices
+- CLI now uses click group with subcommands
+- Running `code-review-mcp` without arguments still starts the MCP server (backward compatible)
+
+## [1.0.1] - 2025-01-10
+
+### Fixed
+
+- Fixed mypy type checking errors for strict mode compatibility
+- Fixed `ToolAnnotations` type usage in tool definitions
+- Fixed `websocket_server` call arguments
+- Fixed import sorting issues (ruff I001)
+- Fixed nested if statements (ruff SIM102)
+- Removed unused imports (ruff F401)
+
+### Changed
+
+- Updated mypy configuration to allow untyped decorators and calls from third-party libraries
+- Improved type annotations in `_call_api` methods
 
 ## [1.0.0] - 2025-01-09
 
@@ -47,5 +66,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tokens configured via environment variables only
 - Non-root user in Docker container
 
-[Unreleased]: https://github.com/OldJii/code-review-mcp/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/OldJii/code-review-mcp/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/OldJii/code-review-mcp/compare/v1.0.1...v1.1.0
+[1.0.1]: https://github.com/OldJii/code-review-mcp/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/OldJii/code-review-mcp/releases/tag/v1.0.0

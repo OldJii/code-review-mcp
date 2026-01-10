@@ -1,0 +1,268 @@
+---
+description: Code Review Guidelines (English)
+globs: 
+alwaysApply: false
+---
+
+# Code Review Guidelines
+
+> Automatically select version based on user input language. Use this file for English input, use code-review.mdc for Chinese input.
+
+## Core Principles
+
+**Understand First**
+- Understand the overall PR/MR purpose before analyzing diff
+- Deep analysis (architecture/logic/performance/security) over style checks
+- Only flag "confirmed issues", not "potential issues"
+- Analyze with context, not in isolation
+
+---
+
+## Review Workflow
+
+### Step 1: Determine PR Type
+
+```
+Main repo PR -> Extract module PRs from description
+Module PR -> Review directly
+```
+
+### Step 2: Get Complete Changes
+
+```python
+changes = get_pr_changes(provider, repo, pr_id)
+for change in changes["changes"]:
+    full_diff = change["diff"]
+    analyze(full_diff)
+```
+
+**Required**: Review all files and complete diffs
+**Forbidden**: `diff[:100]` or `changes[:10]`
+
+### Step 3: Understand PR Context (Do This First)
+
+Before reviewing any diff, answer:
+
+1. **Purpose** (from title + description): New feature / Bug fix / Refactor?
+2. **Scope** (from changes): Which files added/deleted/modified?
+3. **Architecture**: Class relationships, data flow, design patterns?
+4. **Expected Implementation**: What should be implemented?
+
+### Step 4: Deep Code Analysis
+
+#### 4.1 Understand Diff Intent
+- What role does this diff play in the overall PR?
+- Does it align with the PR purpose?
+
+#### 4.2 Architecture Review
+- Single responsibility?
+- Code duplication?
+- Clear abstraction layers?
+- Reasonable design in overall architecture?
+
+#### 4.3 Logic Review (with context)
+- **Boundary conditions**: Does caller already ensure non-null?
+- **Exception scenarios**: Can they actually occur in business flow?
+- **State transitions**: Complete in context of full state machine?
+
+**Avoid false positives**: Caller already validated -> Skip
+
+#### 4.4 Performance Review (realistic scenarios)
+- Data volume? Will it actually be a bottleneck?
+- Loop iterations? Actually impact performance?
+- Time cost? Will it actually cause lag?
+
+**Avoid false positives**: Data <= 5 items -> Skip / Time < 1ms -> Skip
+
+#### 4.5 Security & Crash Risk
+- Confirm actual NPE/index out of bounds/resource leak risks
+- Consider complete call chain and business flow
+
+**Avoid false positives**: Already validated above -> Skip
+
+### Step 5: Deduplication
+
+```python
+# 1. Deduplicate: Same issue in same file -> merge
+seen = {(file, issue_type): comment}
+merge_line_numbers(seen[key], comment)
+
+# 2. Group by priority
+p0, p1, p2 = group_by_priority(seen.values())
+
+# 3. Dynamic adjustment
+if len(p0) > 10:
+    p1 = p1[:len(p1)//2]
+    p2 = p2[:len(p2)//3]
+
+final_comments = p0 + p1 + p2
+```
+
+**Dedup rules**:
+- Same issue in same file -> merge with all line numbers
+- Same issue in different files -> 1 comment per file
+- Long methods -> max 2 per file
+
+### Step 6: Preview Comments for Confirmation
+
+**Before submitting, show all comments for user approval**
+
+Format:
+```
+## Review Results Preview
+
+### Inline Comments (N total)
+
+1. [P0/P1/P2] filename:line
+   Comment preview...
+
+2. [P0/P1/P2] filename:line
+   Comment preview...
+
+### Summary Comment
+
+[Summary preview]
+
+---
+
+Waiting for confirmation before submitting.
+```
+
+### Step 7: Submit After Confirmation
+
+**Important**: Use `line + 1` to avoid covering the code line
+
+```python
+for comment in inline_comments:
+    comment['line'] = comment['line'] + 1
+
+batch_add_comments(
+    provider=provider,
+    repo=repo,
+    pr_id=pr_id,
+    inline_comments=inline_comments,
+    pr_comment=summary_comment
+)
+```
+
+---
+
+## Comment Format
+
+### Inline Comments
+
+**Quantity strategy**:
+- P0: Unlimited
+- P1: Reduce 50% if P0 > 10
+- P2: Reduce 70% if P0 > 10
+
+**Format**: `[Icon] [Issue]\n\n[Reason (1 line)]\n[Suggestion (1-2 lines)]`
+
+**Icons**: P0 / P1 / P2
+
+### Summary Comment
+
+Format (8-10 lines):
+```
+## Code Review Summary
+
+**Changes**: [Brief description, 1 line]
+**Assessment**: [Pass/Needs changes, 1 line]
+
+### Issues (N total)
+1. [Type] file:line - [Description]
+```
+
+---
+
+## Priority Definitions
+
+**P0 - Unlimited**:
+- Crash risk (confirmed)
+- Memory leak (confirmed no release path)
+- Severe performance issue (confirmed freeze/timeout)
+- Security vulnerability
+- Missing functionality
+
+**P1 - Reduce 50% if P0 > 10**:
+- Architecture issues (confirmed unreasonable)
+- Performance optimization (confirmed bottleneck)
+- Logic flaws (confirmed gaps)
+- Code quality (confirmed maintainability impact)
+
+**P2 - Reduce 70% if P0 > 10**:
+- Code reuse opportunities
+- Naming improvements
+- Minor optimizations
+
+---
+
+## Checklist
+
+| Type | Check | Skip If | Priority |
+|------|-------|---------|----------|
+| NPE | Caller validated? | Yes -> Skip | Confirmed -> P0 |
+| Index OOB | Length checked above? | Yes -> Skip | Confirmed -> P0 |
+| Resource Leak | Closed in finally? | Yes -> Skip | Confirmed -> P0 |
+| Performance | Data volume? | <= 5 -> Skip | Confirmed freeze -> P0 |
+| Threading | Time cost? | < 1ms -> Skip | Confirmed lag -> P0 |
+
+**Principle**: Only flag confirmed issues
+
+---
+
+## Deduplication Rules
+
+| Type | Dedup Method |
+|------|--------------|
+| NPE | Merge same file |
+| Performance | Separate per loop |
+| Architecture | Merge all locations |
+| Style issues | Must merge |
+| Long methods | Max 2 per file |
+
+**Priority**: Style must merge > NPE/long methods should merge > Architecture/performance can be separate
+
+---
+
+## MCP Tools
+
+| Tool | Purpose |
+|------|---------|
+| `get_pr_info` | Get PR/MR info (includes description) |
+| `get_pr_changes` | Get code changes (complete diff) |
+| `extract_related_prs` | Extract module PRs from main repo |
+| `batch_add_comments` | Submit all comments at once |
+| `add_inline_comment` | Add single inline comment |
+| `add_pr_comment` | Add summary comment |
+
+---
+
+## Must Do
+
+1. Understand overall PR first
+2. Analyze with context
+3. Only flag confirmed issues
+4. Deep analysis before style checks
+5. Deduplicate comments
+6. P0 unlimited, reduce P1/P2 if P0 > 10
+7. **Preview all comments for user confirmation**
+8. **Wait for user approval before submitting**
+9. **Use line + 1 when submitting (avoid covering code)**
+
+## Must Not Do
+
+1. Review without understanding
+2. Ignore context
+3. False positives ("might be an issue")
+4. Theoretical concerns (ignoring real scenarios)
+5. Rule-driven thinking (mechanical matching)
+6. Style over substance
+7. Duplicate comments
+8. Verbose summaries (> 10 lines)
+9. Comment-related suggestions
+10. **Submit comments without user confirmation**
+
+---
+
+**Version**: v1.0
