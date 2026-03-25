@@ -38,8 +38,10 @@ class CodeReviewProvider(ABC):
         line: int,
         line_type: str,
         comment: str,
+        start_line: int | None = None,
+        start_line_type: str | None = None,
     ) -> dict[str, Any]:
-        """Add inline comment to specific line."""
+        """Add inline comment to specific line or range of lines."""
         pass
 
     @abstractmethod
@@ -162,8 +164,14 @@ class GitLabProvider(CodeReviewProvider):
             "total_files": len(filtered_changes),
         }
 
-    def _find_line_code(self, diff: str, target_line: int, line_type: str, head_sha: str) -> str:
-        """Find line_code from diff for GitLab API."""
+    def _find_line_info(
+        self, diff: str, target_line: int, line_type: str, head_sha: str
+    ) -> tuple[str, int | None, int | None]:
+        """Find line_code and line numbers from diff for GitLab API.
+
+        Returns (line_code, old_line_num, new_line_num).
+        For 'old' lines: new_line_num is None; for 'new' lines: old_line_num is the context value.
+        """
         lines = diff.split("\n")
         old_line = 0
         new_line = 0
@@ -177,16 +185,16 @@ class GitLabProvider(CodeReviewProvider):
             elif line.startswith("-"):
                 old_line += 1
                 if line_type == "old" and old_line == target_line:
-                    return f"{head_sha}_{old_line}_"
+                    return f"{head_sha}_{old_line}_", old_line, None
             elif line.startswith("+"):
                 new_line += 1
                 if line_type == "new" and new_line == target_line:
-                    return f"{head_sha}_{old_line}_{new_line}"
+                    return f"{head_sha}_{old_line}_{new_line}", None, new_line
             else:
                 old_line += 1
                 new_line += 1
 
-        return ""
+        return "", None, None
 
     async def add_inline_comment(
         self,
@@ -196,6 +204,8 @@ class GitLabProvider(CodeReviewProvider):
         line: int,
         line_type: str,
         comment: str,
+        start_line: int | None = None,
+        start_line_type: str | None = None,
     ) -> dict[str, Any]:
         """Add inline comment."""
         project_id = repo.replace("/", "%2F")
@@ -217,8 +227,9 @@ class GitLabProvider(CodeReviewProvider):
         if not target_diff:
             return {"success": False, "error": f"File not found: {file_path}"}
 
-        line_code = self._find_line_code(
-            target_diff, line, line_type, mr_info.get("diff_refs", {}).get("head_sha", "")
+        head_sha = mr_info.get("diff_refs", {}).get("head_sha", "")
+        line_code, end_old_line, end_new_line = self._find_line_info(
+            target_diff, line, line_type, head_sha
         )
         if not line_code:
             return {"success": False, "error": f"Cannot locate line {line}"}
@@ -238,6 +249,28 @@ class GitLabProvider(CodeReviewProvider):
             position["old_line"] = line
         else:
             position["new_line"] = line
+
+        if start_line is not None:
+            effective_start_type = start_line_type or line_type
+            start_code, start_old_line, start_new_line = self._find_line_info(
+                target_diff, start_line, effective_start_type, head_sha
+            )
+            if not start_code:
+                return {"success": False, "error": f"Cannot locate start_line {start_line}"}
+            position["line_range"] = {
+                "start": {
+                    "line_code": start_code,
+                    "type": effective_start_type,
+                    "old_line": start_old_line,
+                    "new_line": start_new_line,
+                },
+                "end": {
+                    "line_code": line_code,
+                    "type": line_type,
+                    "old_line": end_old_line,
+                    "new_line": end_new_line,
+                },
+            }
 
         data = {"body": comment, "position": position}
         result = await self._call_api(
@@ -394,6 +427,8 @@ class GitHubProvider(CodeReviewProvider):
         line: int,
         line_type: str,
         comment: str,
+        start_line: int | None = None,
+        start_line_type: str | None = None,
     ) -> dict[str, Any]:
         """Add inline comment using PR review comments API."""
         pr_info = await self._call_api(f"/repos/{repo}/pulls/{pr_id}")
@@ -402,13 +437,17 @@ class GitHubProvider(CodeReviewProvider):
 
         commit_sha = pr_info.get("head", {}).get("sha")
 
-        data = {
+        data: dict[str, Any] = {
             "body": comment,
             "commit_id": commit_sha,
             "path": file_path,
             "line": line,
             "side": "RIGHT" if line_type == "new" else "LEFT",
         }
+
+        if start_line is not None:
+            data["start_line"] = start_line
+            data["start_side"] = "RIGHT" if (start_line_type or line_type) == "new" else "LEFT"
 
         result = await self._call_api(
             f"/repos/{repo}/pulls/{pr_id}/comments", method="POST", data=data
