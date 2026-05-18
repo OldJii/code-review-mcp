@@ -196,6 +196,12 @@ docker run -d --rm \
 
 ## 🔨 MCP Tools
 
+### Rules
+
+| Tool | Description |
+|------|-------------|
+| `get_review_rules` | Get review rules (builtin + custom project rules) |
+
 ### Information Retrieval
 
 | Tool | Description |
@@ -315,14 +321,46 @@ After installation, the rules will be available in your project's `.cursor/rules
 - `code-review.mdc` - Chinese version
 - `code-review-en.mdc` - English version
 
-### Customizing Rules
+### Custom Project Rules
 
-The installed rules are general templates. You can customize them for your project:
+You can define project-specific review rules that the MCP server loads at runtime. This allows each project to enforce its own coding standards during reviews.
 
-- Priority definitions
-- Checklist items
-- Comment format
-- Deduplication rules
+**Quick Setup:**
+
+```bash
+# Generate a custom rules template
+code-review-mcp init-rules --custom
+```
+
+This creates `.code-review-rules/project-rules.md` in your project. Edit it with your project-specific conventions, then configure the MCP server to load it:
+
+```json
+{
+  "mcpServers": {
+    "code-review": {
+      "command": "uvx",
+      "args": ["code-review-mcp"],
+      "env": {
+        "GITHUB_TOKEN": "your-token",
+        "CODE_REVIEW_RULES_DIR": "/absolute/path/to/project/.code-review-rules"
+      }
+    }
+  }
+}
+```
+
+**How It Works:**
+
+- Set `CODE_REVIEW_RULES_DIR` to a directory containing `.md` or `.mdc` files
+- The `get_review_rules` tool returns both builtin and custom rules
+- AI assistants use these rules when performing reviews
+- Custom rules supplement (not replace) the builtin review guidelines
+
+**Environment Variable:**
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `CODE_REVIEW_RULES_DIR` | Path to custom rules directory | No (optional) |
 
 ## 🤝 Contributing
 

@@ -1,6 +1,9 @@
 """Tests for Code Review MCP Server."""
 
-from code_review_mcp.server import TOOLS, extract_related_prs
+import tempfile
+from pathlib import Path
+
+from code_review_mcp.server import TOOLS, _load_rules, extract_related_prs
 
 
 class TestExtractRelatedPRs:
@@ -69,6 +72,7 @@ class TestToolDefinitions:
     def test_expected_tools_exist(self) -> None:
         """Test that expected tools are defined."""
         expected_tools = {
+            "get_review_rules",
             "get_pr_info",
             "get_pr_changes",
             "add_inline_comment",
@@ -78,3 +82,58 @@ class TestToolDefinitions:
         }
         actual_tools = {tool.name for tool in TOOLS}
         assert expected_tools == actual_tools
+
+
+class TestLoadRules:
+    """Tests for _load_rules function."""
+
+    def test_load_builtin_rules(self) -> None:
+        """Test loading builtin rules."""
+        rules = _load_rules(include_builtin=True)
+        assert len(rules) >= 2
+        assert all(r["source"] == "builtin" for r in rules)
+
+    def test_load_builtin_rules_zh(self) -> None:
+        """Test loading only Chinese builtin rules."""
+        rules = _load_rules(include_builtin=True, lang="zh")
+        assert len(rules) >= 1
+        assert all(not r["name"].endswith("-en") for r in rules)
+
+    def test_load_builtin_rules_en(self) -> None:
+        """Test loading only English builtin rules."""
+        rules = _load_rules(include_builtin=True, lang="en")
+        assert len(rules) >= 1
+        assert all(r["name"].endswith("-en") for r in rules)
+
+    def test_load_custom_rules(self) -> None:
+        """Test loading custom rules from a directory."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            rule_file = Path(tmpdir) / "my-rules.md"
+            rule_file.write_text("# My Custom Rules\n\nTest content.")
+
+            rules = _load_rules(include_builtin=False, custom_rules_dir=tmpdir)
+            assert len(rules) == 1
+            assert rules[0]["name"] == "my-rules"
+            assert rules[0]["source"] == "custom"
+            assert "Test content" in rules[0]["content"]
+
+    def test_load_both_builtin_and_custom(self) -> None:
+        """Test loading both builtin and custom rules."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            rule_file = Path(tmpdir) / "project.md"
+            rule_file.write_text("# Project Rules")
+
+            rules = _load_rules(include_builtin=True, custom_rules_dir=tmpdir)
+            sources = {r["source"] for r in rules}
+            assert "builtin" in sources
+            assert "custom" in sources
+
+    def test_no_custom_dir(self) -> None:
+        """Test with no custom rules directory."""
+        rules = _load_rules(include_builtin=False, custom_rules_dir=None)
+        assert rules == []
+
+    def test_nonexistent_custom_dir(self) -> None:
+        """Test with nonexistent custom rules directory."""
+        rules = _load_rules(include_builtin=False, custom_rules_dir="/nonexistent/path")
+        assert rules == []

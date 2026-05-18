@@ -196,6 +196,12 @@ docker run -d --rm \
 
 ## 🔨 MCP 工具
 
+### 规则
+
+| 工具 | 说明 |
+|------|------|
+| `get_review_rules` | 获取审查规则（内置 + 自定义项目规则） |
+
 ### 信息获取
 
 | 工具 | 说明 |
@@ -315,14 +321,46 @@ code-review-mcp list-rules
 - `code-review.mdc` - 中文版
 - `code-review-en.mdc` - 英文版
 
-### 自定义规则
+### 自定义项目规则
 
-安装的规则是通用模板，你可以根据项目需要自定义：
+你可以定义项目专属的审查规则，MCP Server 在运行时加载。每个项目都能强制执行自己的编码标准。
 
-- 优先级定义
-- 检查清单
-- 评论格式
-- 去重规则
+**快速设置：**
+
+```bash
+# 生成自定义规则模板
+code-review-mcp init-rules --custom
+```
+
+这会在项目中创建 `.code-review-rules/project-rules.md`。编辑后，配置 MCP Server 加载：
+
+```json
+{
+  "mcpServers": {
+    "code-review": {
+      "command": "uvx",
+      "args": ["code-review-mcp"],
+      "env": {
+        "GITHUB_TOKEN": "your-token",
+        "CODE_REVIEW_RULES_DIR": "/absolute/path/to/project/.code-review-rules"
+      }
+    }
+  }
+}
+```
+
+**工作原理：**
+
+- 设置 `CODE_REVIEW_RULES_DIR` 指向包含 `.md` 或 `.mdc` 文件的目录
+- `get_review_rules` 工具同时返回内置规则和自定义规则
+- AI 助手在执行审查时使用这些规则
+- 自定义规则是对内置规则的补充（不是替换）
+
+**环境变量：**
+
+| 变量 | 说明 | 必填 |
+|------|------|------|
+| `CODE_REVIEW_RULES_DIR` | 自定义规则目录路径 | 否（可选） |
 
 ## 🤝 贡献
 

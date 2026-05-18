@@ -77,6 +77,32 @@ def cli(
             run_websocket(host, port)
 
 
+CUSTOM_RULE_TEMPLATE = """\
+# {project_name} Code Review Rules
+
+> Project-specific review rules loaded by code-review-mcp via CODE_REVIEW_RULES_DIR.
+> These rules supplement the builtin rules and focus on project conventions.
+
+## Project Conventions
+
+<!-- Add your project-specific coding conventions here -->
+
+## Architecture Rules
+
+<!-- Add architectural constraints and patterns to check -->
+
+## Common Pitfalls
+
+<!-- List project-specific anti-patterns and common mistakes -->
+
+## Checklist
+
+| Type | Check | Skip If | Priority |
+|------|-------|---------|----------|
+| Example | Description | Condition | P0/P1/P2 |
+"""
+
+
 @cli.command("init-rules")
 @click.option(
     "--force",
@@ -91,7 +117,13 @@ def cli(
     default=".",
     help="Target directory (default: current directory)",
 )
-def init_rules(force: bool, target: str) -> None:
+@click.option(
+    "--custom",
+    "-c",
+    is_flag=True,
+    help="Also generate a custom rules template for project-specific rules",
+)
+def init_rules(force: bool, target: str, custom: bool) -> None:
     """
     Initialize Cursor rules for code review in your project.
 
@@ -99,10 +131,16 @@ def init_rules(force: bool, target: str) -> None:
     .cursor/rules/ directory, enabling AI-assisted code review
     with best practices.
 
+    Use --custom to also generate a custom rules template that
+    the MCP server can load via CODE_REVIEW_RULES_DIR.
+
     Examples:
 
         # Initialize rules in current directory
         code-review-mcp init-rules
+
+        # Initialize with custom rules template
+        code-review-mcp init-rules --custom
 
         # Initialize rules in a specific directory
         code-review-mcp init-rules --target /path/to/project
@@ -148,12 +186,43 @@ def init_rules(force: bool, target: str) -> None:
         click.echo("\nRules installed:")
         for rule in copied:
             click.echo(f"  - {rule}")
+
+    # Generate custom rules template
+    if custom:
+        custom_rules_dir = target_path / ".code-review-rules"
+        custom_rules_dir.mkdir(parents=True, exist_ok=True)
+        custom_file = custom_rules_dir / "project-rules.md"
+
+        if custom_file.exists() and not force:
+            click.echo(
+                click.style(f"\nCustom rules already exist: {custom_file}", fg="yellow")
+            )
+            click.echo("Use --force to overwrite.")
+        else:
+            project_name = target_path.name
+            custom_file.write_text(
+                CUSTOM_RULE_TEMPLATE.format(project_name=project_name),
+                encoding="utf-8",
+            )
+            click.echo(click.style("\n✓ Custom rules template created!", fg="green"))
+            click.echo(f"  Location: {custom_file}")
+            click.echo(
+                f"\n  To use, set environment variable:\n"
+                f"  CODE_REVIEW_RULES_DIR={custom_rules_dir}"
+            )
+
+    if copied or custom:
         click.echo(
             "\n" + click.style("Next steps:", fg="cyan") + "\n"
             "1. Open your project in Cursor\n"
             "2. The rules will be automatically loaded\n"
             "3. Use @code-review or @code-review-en to reference the rules"
         )
+        if custom:
+            click.echo(
+                "4. Edit .code-review-rules/project-rules.md with your project conventions\n"
+                "5. Set CODE_REVIEW_RULES_DIR in your MCP config"
+            )
     else:
         click.echo(click.style("No rules found to install.", fg="yellow"))
 

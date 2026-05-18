@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-05-18
+
+### Added
+
+- New `get_review_rules` MCP tool to load review rules (builtin + custom project rules) at runtime
+- Custom project rules support via `CODE_REVIEW_RULES_DIR` environment variable
+- `--custom` flag for `init-rules` command to generate a custom rules template
+- Language filter (`lang` parameter) for `get_review_rules` to select Chinese or English builtin rules
+- Tests for the rules loading system
+
+### Changed
+
+- Rules are now accessible programmatically via MCP tool, not just as static files
+
 ## [1.1.0] - 2025-01-10
 
 ### Added
@@ -66,7 +80,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tokens configured via environment variables only
 - Non-root user in Docker container
 
-[Unreleased]: https://github.com/OldJii/code-review-mcp/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/OldJii/code-review-mcp/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/OldJii/code-review-mcp/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/OldJii/code-review-mcp/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/OldJii/code-review-mcp/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/OldJii/code-review-mcp/releases/tag/v1.0.0

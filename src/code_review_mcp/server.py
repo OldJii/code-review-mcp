@@ -5,7 +5,9 @@ Main MCP server implementation using the official MCP SDK.
 Supports stdio, SSE, and WebSocket transports.
 """
 
+import os
 import re
+from pathlib import Path
 from typing import Any, Literal
 
 import click
@@ -24,6 +26,52 @@ mcp = Server("code-review-mcp")
 
 # Provider cache
 _providers: dict[str, CodeReviewProvider] = {}
+
+
+def _get_builtin_rules_dir() -> Path:
+    """Get the path to the bundled rules directory."""
+    return Path(__file__).parent / "rules"
+
+
+def _load_rules(
+    include_builtin: bool = True,
+    custom_rules_dir: str | None = None,
+    lang: str | None = None,
+) -> list[dict[str, str]]:
+    """Load review rules from builtin and/or custom directories.
+
+    Returns a list of dicts with 'name', 'source', and 'content' keys.
+    """
+    rules: list[dict[str, str]] = []
+
+    if include_builtin:
+        builtin_dir = _get_builtin_rules_dir()
+        if builtin_dir.exists():
+            for rule_file in sorted(builtin_dir.glob("*.mdc")):
+                if lang:
+                    if lang == "en" and not rule_file.stem.endswith("-en"):
+                        continue
+                    if lang == "zh" and rule_file.stem.endswith("-en"):
+                        continue
+                rules.append({
+                    "name": rule_file.stem,
+                    "source": "builtin",
+                    "content": rule_file.read_text(encoding="utf-8"),
+                })
+
+    custom_dir = custom_rules_dir or os.environ.get("CODE_REVIEW_RULES_DIR")
+    if custom_dir:
+        custom_path = Path(custom_dir)
+        if custom_path.exists() and custom_path.is_dir():
+            for ext in ("*.md", "*.mdc"):
+                for rule_file in sorted(custom_path.glob(ext)):
+                    rules.append({
+                        "name": rule_file.stem,
+                        "source": "custom",
+                        "content": rule_file.read_text(encoding="utf-8"),
+                    })
+
+    return rules
 
 
 def get_provider(provider_type: str, host: str | None = None) -> CodeReviewProvider:
@@ -63,6 +111,34 @@ def extract_related_prs(
 # =============================================================================
 
 TOOLS = [
+    Tool(
+        name="get_review_rules",
+        description="Get code review rules (builtin + custom project rules). "
+        "Call this before starting a review to load all applicable rules.",
+        inputSchema={
+            "type": "object",
+            "title": "GetReviewRulesInput",
+            "properties": {
+                "lang": {
+                    "type": "string",
+                    "enum": ["zh", "en"],
+                    "description": "Language filter for builtin rules (optional). "
+                    "'zh' for Chinese, 'en' for English. "
+                    "If omitted, all builtin rules are returned.",
+                },
+                "include_builtin": {
+                    "type": "boolean",
+                    "description": "Whether to include builtin rules (default: true)",
+                },
+            },
+            "additionalProperties": False,
+        },
+        annotations=ToolAnnotations(
+            title="Get Review Rules",
+            readOnlyHint=True,
+            openWorldHint=False,
+        ),
+    ),
     Tool(
         name="get_pr_info",
         description="Get PR/MR detailed information including title, description, author, and branches",
@@ -330,6 +406,13 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     result: dict[str, Any]
 
     try:
+        if name == "get_review_rules":
+            rules = _load_rules(
+                include_builtin=arguments.get("include_builtin", True),
+                lang=arguments.get("lang"),
+            )
+            return [TextContent(type="text", text=json.dumps(rules, ensure_ascii=False))]
+
         # extract_related_prs doesn't need authentication
         if name == "extract_related_prs":
             extracted = extract_related_prs(
