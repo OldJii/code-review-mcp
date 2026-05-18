@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-05-18
+
+### Added
+
+- Auto-discover `.code-review-rules/` directory in working directory when `CODE_REVIEW_RULES_DIR` is not set
+
 ## [1.2.0] - 2026-05-18
 
 ### Added
@@ -80,7 +86,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tokens configured via environment variables only
 - Non-root user in Docker container
 
-[Unreleased]: https://github.com/OldJii/code-review-mcp/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/OldJii/code-review-mcp/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/OldJii/code-review-mcp/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/OldJii/code-review-mcp/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/OldJii/code-review-mcp/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/OldJii/code-review-mcp/compare/v1.0.0...v1.0.1

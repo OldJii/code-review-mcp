@@ -352,6 +352,7 @@ This creates `.code-review-rules/project-rules.md` in your project. Edit it with
 **How It Works:**
 
 - Set `CODE_REVIEW_RULES_DIR` to a directory containing `.md` or `.mdc` files
+- Or simply place a `.code-review-rules/` directory in your project root (auto-discovered)
 - The `get_review_rules` tool returns both builtin and custom rules
 - AI assistants use these rules when performing reviews
 - Custom rules supplement (not replace) the builtin review guidelines

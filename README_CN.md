@@ -352,6 +352,7 @@ code-review-mcp init-rules --custom
 **工作原理：**
 
 - 设置 `CODE_REVIEW_RULES_DIR` 指向包含 `.md` 或 `.mdc` 文件的目录
+- 或者直接在项目根目录放一个 `.code-review-rules/` 目录（自动发现）
 - `get_review_rules` 工具同时返回内置规则和自定义规则
 - AI 助手在执行审查时使用这些规则
 - 自定义规则是对内置规则的补充（不是替换）

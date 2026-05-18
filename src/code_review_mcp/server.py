@@ -60,6 +60,11 @@ def _load_rules(
                 })
 
     custom_dir = custom_rules_dir or os.environ.get("CODE_REVIEW_RULES_DIR")
+    if not custom_dir:
+        auto_discover = Path.cwd() / ".code-review-rules"
+        if auto_discover.exists() and auto_discover.is_dir():
+            custom_dir = str(auto_discover)
+
     if custom_dir:
         custom_path = Path(custom_dir)
         if custom_path.exists() and custom_path.is_dir():
@@ -114,7 +119,9 @@ TOOLS = [
     Tool(
         name="get_review_rules",
         description="Get code review rules (builtin + custom project rules). "
-        "Call this before starting a review to load all applicable rules.",
+        "Call this before starting a review to load all applicable rules. "
+        "Custom rules are loaded from CODE_REVIEW_RULES_DIR env var, "
+        "or auto-discovered from .code-review-rules/ in the working directory.",
         inputSchema={
             "type": "object",
             "title": "GetReviewRulesInput",
