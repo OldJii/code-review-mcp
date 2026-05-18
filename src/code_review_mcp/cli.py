@@ -194,9 +194,7 @@ def init_rules(force: bool, target: str, custom: bool) -> None:
         custom_file = custom_rules_dir / "project-rules.md"
 
         if custom_file.exists() and not force:
-            click.echo(
-                click.style(f"\nCustom rules already exist: {custom_file}", fg="yellow")
-            )
+            click.echo(click.style(f"\nCustom rules already exist: {custom_file}", fg="yellow"))
             click.echo("Use --force to overwrite.")
         else:
             project_name = target_path.name
@@ -207,8 +205,7 @@ def init_rules(force: bool, target: str, custom: bool) -> None:
             click.echo(click.style("\n✓ Custom rules template created!", fg="green"))
             click.echo(f"  Location: {custom_file}")
             click.echo(
-                f"\n  To use, set environment variable:\n"
-                f"  CODE_REVIEW_RULES_DIR={custom_rules_dir}"
+                f"\n  To use, set environment variable:\n  CODE_REVIEW_RULES_DIR={custom_rules_dir}"
             )
 
     if copied or custom:

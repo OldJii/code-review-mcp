@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "code-review-mcp"
-version = "1.2.1"
+version = "1.2.2"
 description = "MCP Server for GitHub/GitLab code review - enables AI assistants to review pull requests and merge requests"
 readme = "README.md"
 license = "MIT"

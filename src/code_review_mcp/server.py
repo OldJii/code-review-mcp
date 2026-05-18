@@ -53,11 +53,13 @@ def _load_rules(
                         continue
                     if lang == "zh" and rule_file.stem.endswith("-en"):
                         continue
-                rules.append({
-                    "name": rule_file.stem,
-                    "source": "builtin",
-                    "content": rule_file.read_text(encoding="utf-8"),
-                })
+                rules.append(
+                    {
+                        "name": rule_file.stem,
+                        "source": "builtin",
+                        "content": rule_file.read_text(encoding="utf-8"),
+                    }
+                )
 
     custom_dir = custom_rules_dir or os.environ.get("CODE_REVIEW_RULES_DIR")
     if not custom_dir:
@@ -70,11 +72,13 @@ def _load_rules(
         if custom_path.exists() and custom_path.is_dir():
             for ext in ("*.md", "*.mdc"):
                 for rule_file in sorted(custom_path.glob(ext)):
-                    rules.append({
-                        "name": rule_file.stem,
-                        "source": "custom",
-                        "content": rule_file.read_text(encoding="utf-8"),
-                    })
+                    rules.append(
+                        {
+                            "name": rule_file.stem,
+                            "source": "custom",
+                            "content": rule_file.read_text(encoding="utf-8"),
+                        }
+                    )
 
     return rules
 
