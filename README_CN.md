@@ -8,6 +8,8 @@
 
 基于 MCP (Model Context Protocol) 的代码审查服务器，让 AI 助手能够审查 GitHub/GitLab 的 Pull Request 和 Merge Request。
 
+> **关键词**：MCP 服务器、AI 代码审查、GitHub PR 审查、GitLab MR、Cursor IDE、Claude Desktop、Model Context Protocol、自动化 PR 评论。
+
 ## ✨ 特性
 
 - 🔍 **多平台支持**：同时支持 GitHub 和 GitLab（包括私有部署）
@@ -370,6 +372,29 @@ code-review-mcp init-rules --custom
 ## 📄 License
 
 [MIT](LICENSE)
+
+## ❓ 常见问题
+
+**code-review-mcp 是什么？**  
+基于 MCP 的代码审查服务器，让 Cursor、Claude 等 AI 助手获取 PR/MR diff 并发布行内或整体评论，支持 GitHub 与 GitLab。
+
+**如何安装？**  
+最快：`uvx code-review-mcp`。或 `pip install code-review-mcp`。见[快速开始](#-快速开始)。
+
+**支持私有化 GitLab 吗？**  
+支持。设置 `GITLAB_TOKEN` 和 `GITLAB_HOST=gitlab.yourcompany.com`。
+
+**支持哪些 AI 客户端？**  
+任意 MCP 客户端 — Cursor、Claude Desktop，以及通过 stdio、SSE、WebSocket 的自定义集成。
+
+**可以添加项目专属审查规则吗？**  
+可以。运行 `code-review-mcp init-rules --custom` 或设置 `CODE_REVIEW_RULES_DIR`。
+
+**代码会被持久化存储吗？**  
+不会。Token 从环境变量读取；diff 按需从 GitHub/GitLab API 拉取。
+
+**AI 助手在哪里读取结构化摘要？**  
+见仓库 [`llms.txt`](./llms.txt)。
 
 ## 🔗 相关链接
 

@@ -8,6 +8,8 @@ English | [中文](README_CN.md)
 
 MCP (Model Context Protocol) server for code review. Enables AI assistants to review GitHub/GitLab Pull Requests and Merge Requests.
 
+> **Keywords**: MCP server, AI code review, GitHub pull request review, GitLab merge request, Cursor IDE, Claude Desktop, Model Context Protocol, automated PR comments.
+
 ## ✨ Features
 
 - 🔍 **Multi-platform**: Supports both GitHub and GitLab (including self-hosted)
@@ -370,6 +372,29 @@ Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 ## 📄 License
 
 [MIT](LICENSE)
+
+## ❓ FAQ
+
+**What is code-review-mcp?**  
+An MCP server that lets AI assistants (Cursor, Claude, etc.) fetch PR/MR diffs and post inline or general review comments on GitHub and GitLab.
+
+**How do I install it?**  
+Fastest: `uvx code-review-mcp`. Or `pip install code-review-mcp`. See [Quick Start](#-quick-start).
+
+**Does it work with self-hosted GitLab?**  
+Yes. Set `GITLAB_TOKEN` and `GITLAB_HOST=gitlab.yourcompany.com`.
+
+**Which AI clients are supported?**  
+Any MCP client — Cursor, Claude Desktop, and custom integrations via stdio, SSE, or WebSocket.
+
+**Can I add project-specific review rules?**  
+Yes. Run `code-review-mcp init-rules --custom` or set `CODE_REVIEW_RULES_DIR`.
+
+**Is my code stored on a server?**  
+No persistent storage. Tokens are read from environment variables; diffs are fetched on demand from GitHub/GitLab APIs.
+
+**Where can AI assistants read a structured summary?**  
+See [`llms.txt`](./llms.txt) in this repository.
 
 ## 🔗 Related Links
 

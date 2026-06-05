@@ -1,0 +1,35 @@
+# Code Review MCP Server
+
+> MCP server that lets AI assistants review GitHub Pull Requests and GitLab Merge Requests.
+
+code-review-mcp is a Model Context Protocol (MCP) server for automated code review. It connects to GitHub and GitLab (including self-hosted GitLab), fetches PR/MR diffs, and exposes MCP tools for inline comments, batch comments, and custom project review rules. Works with Cursor, Claude Desktop, and any MCP-compatible client via stdio, SSE, or WebSocket.
+
+## Documentation
+
+- [README (English)](https://github.com/OldJii/code-review-mcp/blob/main/README.md): Full setup and configuration
+- [README (中文)](https://github.com/OldJii/code-review-mcp/blob/main/README_CN.md): Chinese documentation
+- [PyPI](https://pypi.org/project/code-review-mcp/): `pip install code-review-mcp` or `uvx code-review-mcp`
+
+## MCP tools
+
+- `get_review_rules` — builtin + custom project rules
+- `get_pr_info` — PR/MR metadata
+- `get_pr_changes` — diff with optional file-type filter
+- `add_inline_comment`, `add_pr_comment`, `batch_add_comments` — post review feedback
+
+## Quick start
+
+```bash
+uvx code-review-mcp
+# or: pip install code-review-mcp && code-review-mcp
+```
+
+Set `GITHUB_TOKEN` and/or `GITLAB_TOKEN` (and `GITLAB_HOST` for self-hosted).
+
+## Common questions
+
+- **Cursor setup**: Add to `~/.cursor/mcp.json` with command `uvx` and args `["code-review-mcp"]`
+- **Self-hosted GitLab**: Set `GITLAB_HOST=gitlab.yourcompany.com`
+- **Custom rules**: `code-review-mcp init-rules` or `CODE_REVIEW_RULES_DIR`
+- **Remote deploy**: `--transport sse` or `--transport websocket` on port 8000
+- **License**: MIT
