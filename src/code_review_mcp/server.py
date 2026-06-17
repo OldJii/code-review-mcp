@@ -249,7 +249,7 @@ TOOLS = [
                 },
                 "line": {
                     "type": "integer",
-                    "description": "Line number to comment on",
+                    "description": "Line number to comment on (end line for multi-line comments)",
                 },
                 "line_type": {
                     "type": "string",
@@ -259,6 +259,15 @@ TOOLS = [
                 "comment": {
                     "type": "string",
                     "description": "Comment content",
+                },
+                "start_line": {
+                    "type": "integer",
+                    "description": "Start line for a multi-line comment (omit for single-line)",
+                },
+                "start_line_type": {
+                    "type": "string",
+                    "enum": ["old", "new"],
+                    "description": "Line type for start_line; defaults to line_type if omitted",
                 },
                 "host": {
                     "type": "string",
@@ -342,9 +351,21 @@ TOOLS = [
                         "type": "object",
                         "properties": {
                             "file_path": {"type": "string"},
-                            "line": {"type": "integer"},
+                            "line": {
+                                "type": "integer",
+                                "description": "Line number to comment on (end line for multi-line comments)",
+                            },
                             "line_type": {"type": "string", "enum": ["old", "new"]},
                             "comment": {"type": "string"},
+                            "start_line": {
+                                "type": "integer",
+                                "description": "Start line for a multi-line comment (omit for single-line)",
+                            },
+                            "start_line_type": {
+                                "type": "string",
+                                "enum": ["old", "new"],
+                                "description": "Line type for start_line; defaults to line_type if omitted",
+                            },
                         },
                         "required": ["file_path", "line", "line_type", "comment"],
                     },
@@ -456,6 +477,8 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments["line"],
                 arguments["line_type"],
                 arguments["comment"],
+                arguments.get("start_line"),
+                arguments.get("start_line_type"),
             )
 
         elif name == "add_pr_comment":
@@ -482,6 +505,8 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                         comment_data["line"],
                         comment_data["line_type"],
                         comment_data["comment"],
+                        comment_data.get("start_line"),
+                        comment_data.get("start_line_type"),
                     )
                     if res.get("success"):
                         batch_results["inline_success"] += 1
