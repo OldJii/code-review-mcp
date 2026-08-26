@@ -20,28 +20,28 @@ def get_rules_dir() -> Path:
 @click.option(
     "--transport",
     "-t",
-    type=click.Choice(["stdio", "sse", "websocket"]),
+    type=click.Choice(["stdio", "sse", "streamable-http"]),
     default=None,
-    help="Transport mode: stdio (default), sse, or websocket",
+    help="Transport mode: stdio (default), sse (legacy), or streamable-http",
 )
 @click.option(
     "--host",
     "-H",
     default="0.0.0.0",
-    help="Host for SSE/WebSocket server (default: 0.0.0.0)",
+    help="Host for HTTP server (default: 0.0.0.0)",
 )
 @click.option(
     "--port",
     "-p",
     default=8000,
     type=int,
-    help="Port for SSE/WebSocket server (default: 8000)",
+    help="Port for HTTP server (default: 8000)",
 )
 @click.version_option()
 @click.pass_context
 def cli(
     ctx: click.Context,
-    transport: Literal["stdio", "sse", "websocket"] | None,
+    transport: Literal["stdio", "sse", "streamable-http"] | None,
     host: str,
     port: int,
 ) -> None:
@@ -55,17 +55,16 @@ def cli(
         # Start MCP server (stdio mode, for Cursor/Claude Desktop)
         code-review-mcp
 
-        # Start with SSE transport
-        code-review-mcp --transport sse --port 8000
+        # Start with Streamable HTTP transport (for deployed servers)
+        code-review-mcp --transport streamable-http --port 8000
 
         # Initialize Cursor rules in your project
         code-review-mcp init-rules
     """
-    # If no subcommand is provided, run the server
     if ctx.invoked_subcommand is None:
         import asyncio
 
-        from .server import run_sse, run_stdio, run_websocket
+        from .server import run_sse, run_stdio, run_streamable_http
 
         transport_mode = transport or "stdio"
 
@@ -74,7 +73,7 @@ def cli(
         elif transport_mode == "sse":
             run_sse(host, port)
         else:
-            run_websocket(host, port)
+            run_streamable_http(host, port)
 
 
 CUSTOM_RULE_TEMPLATE = """\

@@ -5,7 +5,7 @@ MCP (Model Context Protocol) server for GitHub/GitLab code review.
 Enables AI assistants to review pull requests and merge requests.
 """
 
-__version__ = "1.2.2"
+__version__ = "2.0.0"
 __author__ = "Code Review MCP Contributors"
 
 from .providers import GitHubProvider, GitLabProvider

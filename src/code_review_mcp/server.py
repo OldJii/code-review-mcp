@@ -5,31 +5,31 @@ Main MCP server implementation using the official MCP SDK.
 Supports stdio, SSE, and WebSocket transports.
 """
 
+import json
 import os
 import re
 from pathlib import Path
 from typing import Any, Literal
 
 import click
-from mcp.server import Server
+from mcp.server import Server, ServerRequestContext
 from mcp.server.stdio import stdio_server
 from mcp.types import (
+    CallToolRequestParams,
+    CallToolResult,
+    ListToolsResult,
+    PaginatedRequestParams,
     TextContent,
     Tool,
     ToolAnnotations,
 )
 
-from .providers import CodeReviewProvider, GitHubProvider, GitLabProvider
+from .providers import CodeReviewProvider, GitHubProvider, GitLabProvider, ProviderError
 
-# Create the MCP server instance
-mcp = Server("code-review-mcp")
-
-# Provider cache
 _providers: dict[str, CodeReviewProvider] = {}
 
 
 def _get_builtin_rules_dir() -> Path:
-    """Get the path to the bundled rules directory."""
     return Path(__file__).parent / "rules"
 
 
@@ -38,10 +38,6 @@ def _load_rules(
     custom_rules_dir: str | None = None,
     lang: str | None = None,
 ) -> list[dict[str, str]]:
-    """Load review rules from builtin and/or custom directories.
-
-    Returns a list of dicts with 'name', 'source', and 'content' keys.
-    """
     rules: list[dict[str, str]] = []
 
     if include_builtin:
@@ -84,7 +80,6 @@ def _load_rules(
 
 
 def get_provider(provider_type: str, host: str | None = None) -> CodeReviewProvider:
-    """Get or create provider instance."""
     key = f"{provider_type}:{host or 'default'}"
 
     if key not in _providers:
@@ -93,7 +88,7 @@ def get_provider(provider_type: str, host: str | None = None) -> CodeReviewProvi
         elif provider_type == "github":
             _providers[key] = GitHubProvider()
         else:
-            raise ValueError(f"Unknown provider: {provider_type}")
+            raise ProviderError(f"Unknown provider: {provider_type}", error_type="validation")
 
     return _providers[key]
 
@@ -101,7 +96,6 @@ def get_provider(provider_type: str, host: str | None = None) -> CodeReviewProvi
 def extract_related_prs(
     provider: str, description: str, host: str | None = None
 ) -> list[dict[str, Any]]:
-    """Extract related PR/MR links from description."""
     if not description:
         return []
 
@@ -123,17 +117,14 @@ TOOLS = [
     Tool(
         name="get_review_rules",
         description="Get code review rules (builtin + custom project rules). "
-        "Call this before starting a review to load all applicable rules. "
-        "Custom rules are loaded from CODE_REVIEW_RULES_DIR env var, "
-        "or auto-discovered from .code-review-rules/ in the working directory.",
-        inputSchema={
+        "Call this before starting a review to load all applicable rules.",
+        input_schema={
             "type": "object",
-            "title": "GetReviewRulesInput",
             "properties": {
                 "lang": {
                     "type": "string",
                     "enum": ["zh", "en"],
-                    "description": "Language filter for builtin rules (optional). "
+                    "description": "Language filter for builtin rules. "
                     "'zh' for Chinese, 'en' for English. "
                     "If omitted, all builtin rules are returned.",
                 },
@@ -146,21 +137,20 @@ TOOLS = [
         },
         annotations=ToolAnnotations(
             title="Get Review Rules",
-            readOnlyHint=True,
-            openWorldHint=False,
+            read_only_hint=True,
+            open_world_hint=False,
         ),
     ),
     Tool(
         name="get_pr_info",
         description="Get PR/MR detailed information including title, description, author, and branches",
-        inputSchema={
+        input_schema={
             "type": "object",
-            "title": "GetPRInfoInput",
             "properties": {
                 "provider": {
                     "type": "string",
                     "enum": ["github", "gitlab"],
-                    "description": "Code hosting provider (github or gitlab)",
+                    "description": "Code hosting provider",
                 },
                 "repo": {
                     "type": "string",
@@ -172,7 +162,7 @@ TOOLS = [
                 },
                 "host": {
                     "type": "string",
-                    "description": "GitLab host for self-hosted instances (optional, default: gitlab.com)",
+                    "description": "GitLab host for self-hosted instances (default: gitlab.com)",
                 },
             },
             "required": ["provider", "repo", "pr_id"],
@@ -180,16 +170,16 @@ TOOLS = [
         },
         annotations=ToolAnnotations(
             title="Get PR/MR Info",
-            readOnlyHint=True,
-            openWorldHint=True,
+            read_only_hint=True,
+            open_world_hint=True,
         ),
     ),
     Tool(
         name="get_pr_changes",
-        description="Get PR/MR code changes (diff) with optional file extension filtering",
-        inputSchema={
+        description="Get PR/MR code changes (diff) with optional file extension filtering. "
+        "Supports pagination for large PRs.",
+        input_schema={
             "type": "object",
-            "title": "GetPRChangesInput",
             "properties": {
                 "provider": {
                     "type": "string",
@@ -219,16 +209,121 @@ TOOLS = [
         },
         annotations=ToolAnnotations(
             title="Get PR/MR Changes",
-            readOnlyHint=True,
-            openWorldHint=True,
+            read_only_hint=True,
+            open_world_hint=True,
+        ),
+    ),
+    Tool(
+        name="list_pr_comments",
+        description="List existing comments on a PR/MR, including inline review comments "
+        "and general comments. Useful for checking existing discussions before adding new ones.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "provider": {
+                    "type": "string",
+                    "enum": ["github", "gitlab"],
+                    "description": "Code hosting provider",
+                },
+                "repo": {
+                    "type": "string",
+                    "description": "Repository path",
+                },
+                "pr_id": {
+                    "type": "integer",
+                    "description": "PR/MR number",
+                },
+                "host": {
+                    "type": "string",
+                    "description": "GitLab host for self-hosted instances",
+                },
+            },
+            "required": ["provider", "repo", "pr_id"],
+            "additionalProperties": False,
+        },
+        annotations=ToolAnnotations(
+            title="List PR/MR Comments",
+            read_only_hint=True,
+            open_world_hint=True,
+        ),
+    ),
+    Tool(
+        name="get_file_content",
+        description="Get the full content of a file from the repository. "
+        "Useful for understanding complete context when reviewing diffs.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "provider": {
+                    "type": "string",
+                    "enum": ["github", "gitlab"],
+                    "description": "Code hosting provider",
+                },
+                "repo": {
+                    "type": "string",
+                    "description": "Repository path",
+                },
+                "file_path": {
+                    "type": "string",
+                    "description": "Path to the file in the repository",
+                },
+                "ref": {
+                    "type": "string",
+                    "description": "Branch, tag, or commit SHA (default: default branch)",
+                },
+                "host": {
+                    "type": "string",
+                    "description": "GitLab host for self-hosted instances",
+                },
+            },
+            "required": ["provider", "repo", "file_path"],
+            "additionalProperties": False,
+        },
+        annotations=ToolAnnotations(
+            title="Get File Content",
+            read_only_hint=True,
+            open_world_hint=True,
+        ),
+    ),
+    Tool(
+        name="get_pr_commits",
+        description="Get the list of commits in a PR/MR. "
+        "Useful for understanding change progression and identifying which commit introduced an issue.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "provider": {
+                    "type": "string",
+                    "enum": ["github", "gitlab"],
+                    "description": "Code hosting provider",
+                },
+                "repo": {
+                    "type": "string",
+                    "description": "Repository path",
+                },
+                "pr_id": {
+                    "type": "integer",
+                    "description": "PR/MR number",
+                },
+                "host": {
+                    "type": "string",
+                    "description": "GitLab host for self-hosted instances",
+                },
+            },
+            "required": ["provider", "repo", "pr_id"],
+            "additionalProperties": False,
+        },
+        annotations=ToolAnnotations(
+            title="Get PR/MR Commits",
+            read_only_hint=True,
+            open_world_hint=True,
         ),
     ),
     Tool(
         name="add_inline_comment",
         description="Add inline comment to a specific code line in PR/MR",
-        inputSchema={
+        input_schema={
             "type": "object",
-            "title": "AddInlineCommentInput",
             "properties": {
                 "provider": {
                     "type": "string",
@@ -270,18 +365,17 @@ TOOLS = [
         },
         annotations=ToolAnnotations(
             title="Add Inline Comment",
-            readOnlyHint=False,
-            destructiveHint=False,
-            idempotentHint=False,
-            openWorldHint=True,
+            read_only_hint=False,
+            destructive_hint=False,
+            idempotent_hint=False,
+            open_world_hint=True,
         ),
     ),
     Tool(
         name="add_pr_comment",
         description="Add a general comment to PR/MR",
-        inputSchema={
+        input_schema={
             "type": "object",
-            "title": "AddPRCommentInput",
             "properties": {
                 "provider": {
                     "type": "string",
@@ -310,18 +404,17 @@ TOOLS = [
         },
         annotations=ToolAnnotations(
             title="Add PR/MR Comment",
-            readOnlyHint=False,
-            destructiveHint=False,
-            idempotentHint=False,
-            openWorldHint=True,
+            read_only_hint=False,
+            destructive_hint=False,
+            idempotent_hint=False,
+            open_world_hint=True,
         ),
     ),
     Tool(
         name="batch_add_comments",
         description="Batch add multiple inline comments and optionally a general comment",
-        inputSchema={
+        input_schema={
             "type": "object",
-            "title": "BatchAddCommentsInput",
             "properties": {
                 "provider": {
                     "type": "string",
@@ -364,18 +457,103 @@ TOOLS = [
         },
         annotations=ToolAnnotations(
             title="Batch Add Comments",
-            readOnlyHint=False,
-            destructiveHint=False,
-            idempotentHint=False,
-            openWorldHint=True,
+            read_only_hint=False,
+            destructive_hint=False,
+            idempotent_hint=False,
+            open_world_hint=True,
+        ),
+    ),
+    Tool(
+        name="resolve_discussion",
+        description="Resolve a discussion thread on a PR/MR (GitLab only). "
+        "For GitHub, use submit_review with 'approve' action instead.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "provider": {
+                    "type": "string",
+                    "enum": ["github", "gitlab"],
+                    "description": "Code hosting provider",
+                },
+                "repo": {
+                    "type": "string",
+                    "description": "Repository path",
+                },
+                "pr_id": {
+                    "type": "integer",
+                    "description": "PR/MR number",
+                },
+                "discussion_id": {
+                    "type": "string",
+                    "description": "Discussion/thread ID to resolve",
+                },
+                "host": {
+                    "type": "string",
+                    "description": "GitLab host for self-hosted instances",
+                },
+            },
+            "required": ["provider", "repo", "pr_id", "discussion_id"],
+            "additionalProperties": False,
+        },
+        annotations=ToolAnnotations(
+            title="Resolve Discussion",
+            read_only_hint=False,
+            destructive_hint=False,
+            idempotent_hint=True,
+            open_world_hint=True,
+        ),
+    ),
+    Tool(
+        name="submit_review",
+        description="Submit a formal review decision on a PR/MR. "
+        "GitHub: approve, request_changes, comment. "
+        "GitLab: approve, unapprove.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "provider": {
+                    "type": "string",
+                    "enum": ["github", "gitlab"],
+                    "description": "Code hosting provider",
+                },
+                "repo": {
+                    "type": "string",
+                    "description": "Repository path",
+                },
+                "pr_id": {
+                    "type": "integer",
+                    "description": "PR/MR number",
+                },
+                "action": {
+                    "type": "string",
+                    "enum": ["approve", "request_changes", "comment", "unapprove"],
+                    "description": "Review action. GitHub: approve/request_changes/comment. GitLab: approve/unapprove.",
+                },
+                "body": {
+                    "type": "string",
+                    "description": "Review body/comment (optional for approve)",
+                },
+                "host": {
+                    "type": "string",
+                    "description": "GitLab host for self-hosted instances",
+                },
+            },
+            "required": ["provider", "repo", "pr_id", "action"],
+            "additionalProperties": False,
+        },
+        annotations=ToolAnnotations(
+            title="Submit Review",
+            read_only_hint=False,
+            destructive_hint=False,
+            idempotent_hint=False,
+            open_world_hint=True,
         ),
     ),
     Tool(
         name="extract_related_prs",
         description="Extract related PR/MR links from description text",
-        inputSchema={
+        input_schema={
             "type": "object",
-            "title": "ExtractRelatedPRsInput",
             "properties": {
                 "provider": {
                     "type": "string",
@@ -396,133 +574,244 @@ TOOLS = [
         },
         annotations=ToolAnnotations(
             title="Extract Related PRs",
-            readOnlyHint=True,
-            openWorldHint=False,
+            read_only_hint=True,
+            open_world_hint=False,
         ),
     ),
 ]
 
 
-@mcp.list_tools()
-async def list_tools() -> list[Tool]:
-    """List available tools."""
-    return TOOLS
+# =============================================================================
+# Tool Handlers (dict-based dispatch)
+# =============================================================================
+
+async def _handle_get_review_rules(arguments: dict[str, Any]) -> str:
+    rules = _load_rules(
+        include_builtin=arguments.get("include_builtin", True),
+        lang=arguments.get("lang"),
+    )
+    return json.dumps(rules, ensure_ascii=False)
 
 
-@mcp.call_tool()
-async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
-    """Handle tool calls."""
-    import json
+async def _handle_extract_related_prs(arguments: dict[str, Any]) -> str:
+    extracted = extract_related_prs(
+        arguments.get("provider", "github"),
+        arguments["description"],
+        arguments.get("host"),
+    )
+    return json.dumps(extracted, ensure_ascii=False)
 
-    result: dict[str, Any]
+
+async def _handle_get_pr_info(arguments: dict[str, Any]) -> str:
+    provider = get_provider(arguments.get("provider", "github"), arguments.get("host"))
+    result = await provider.get_pr_info(arguments["repo"], arguments["pr_id"])
+    return json.dumps(result, ensure_ascii=False)
+
+
+async def _handle_get_pr_changes(arguments: dict[str, Any]) -> str:
+    provider = get_provider(arguments.get("provider", "github"), arguments.get("host"))
+    result = await provider.get_pr_changes(
+        arguments["repo"],
+        arguments["pr_id"],
+        arguments.get("file_extensions"),
+    )
+    return json.dumps(result, ensure_ascii=False)
+
+
+async def _handle_list_pr_comments(arguments: dict[str, Any]) -> str:
+    provider = get_provider(arguments.get("provider", "github"), arguments.get("host"))
+    result = await provider.list_comments(arguments["repo"], arguments["pr_id"])
+    return json.dumps(result, ensure_ascii=False)
+
+
+async def _handle_get_file_content(arguments: dict[str, Any]) -> str:
+    provider = get_provider(arguments.get("provider", "github"), arguments.get("host"))
+    result = await provider.get_file_content(
+        arguments["repo"], arguments["file_path"], arguments.get("ref")
+    )
+    return json.dumps(result, ensure_ascii=False)
+
+
+async def _handle_get_pr_commits(arguments: dict[str, Any]) -> str:
+    provider = get_provider(arguments.get("provider", "github"), arguments.get("host"))
+    result = await provider.get_pr_commits(arguments["repo"], arguments["pr_id"])
+    return json.dumps(result, ensure_ascii=False)
+
+
+async def _handle_add_inline_comment(arguments: dict[str, Any]) -> str:
+    provider = get_provider(arguments.get("provider", "github"), arguments.get("host"))
+    result = await provider.add_inline_comment(
+        arguments["repo"],
+        arguments["pr_id"],
+        arguments["file_path"],
+        arguments["line"],
+        arguments["line_type"],
+        arguments["comment"],
+    )
+    return json.dumps(result, ensure_ascii=False)
+
+
+async def _handle_add_pr_comment(arguments: dict[str, Any]) -> str:
+    provider = get_provider(arguments.get("provider", "github"), arguments.get("host"))
+    result = await provider.add_pr_comment(
+        arguments["repo"],
+        arguments["pr_id"],
+        arguments["comment"],
+    )
+    return json.dumps(result, ensure_ascii=False)
+
+
+async def _handle_batch_add_comments(arguments: dict[str, Any]) -> str:
+    provider = get_provider(arguments.get("provider", "github"), arguments.get("host"))
+
+    batch_results: dict[str, Any] = {
+        "inline_success": 0,
+        "inline_failed": 0,
+        "pr_comment_success": False,
+        "errors": [],
+    }
+
+    for comment_data in arguments.get("inline_comments", []):
+        try:
+            res = await provider.add_inline_comment(
+                arguments["repo"],
+                arguments["pr_id"],
+                comment_data["file_path"],
+                comment_data["line"],
+                comment_data["line_type"],
+                comment_data["comment"],
+            )
+            if res.get("success"):
+                batch_results["inline_success"] += 1
+            else:
+                batch_results["inline_failed"] += 1
+                batch_results["errors"].append(
+                    {
+                        "file": comment_data["file_path"],
+                        "line": comment_data["line"],
+                        "error": res.get("error"),
+                    }
+                )
+        except Exception as e:
+            batch_results["inline_failed"] += 1
+            batch_results["errors"].append(
+                {
+                    "file": comment_data.get("file_path"),
+                    "error": str(e),
+                }
+            )
+
+    if arguments.get("pr_comment"):
+        try:
+            res = await provider.add_pr_comment(
+                arguments["repo"],
+                arguments["pr_id"],
+                arguments["pr_comment"],
+            )
+            batch_results["pr_comment_success"] = res.get("success", False)
+        except Exception as e:
+            batch_results["errors"].append({"type": "pr_comment", "error": str(e)})
+
+    return json.dumps(batch_results, ensure_ascii=False)
+
+
+async def _handle_resolve_discussion(arguments: dict[str, Any]) -> str:
+    provider = get_provider(arguments.get("provider", "github"), arguments.get("host"))
+    result = await provider.resolve_discussion(
+        arguments["repo"], arguments["pr_id"], arguments["discussion_id"]
+    )
+    return json.dumps(result, ensure_ascii=False)
+
+
+async def _handle_submit_review(arguments: dict[str, Any]) -> str:
+    provider = get_provider(arguments.get("provider", "github"), arguments.get("host"))
+    result = await provider.submit_review(
+        arguments["repo"], arguments["pr_id"], arguments["action"], arguments.get("body")
+    )
+    return json.dumps(result, ensure_ascii=False)
+
+
+TOOL_HANDLERS: dict[str, Any] = {
+    "get_review_rules": _handle_get_review_rules,
+    "get_pr_info": _handle_get_pr_info,
+    "get_pr_changes": _handle_get_pr_changes,
+    "list_pr_comments": _handle_list_pr_comments,
+    "get_file_content": _handle_get_file_content,
+    "get_pr_commits": _handle_get_pr_commits,
+    "add_inline_comment": _handle_add_inline_comment,
+    "add_pr_comment": _handle_add_pr_comment,
+    "batch_add_comments": _handle_batch_add_comments,
+    "resolve_discussion": _handle_resolve_discussion,
+    "submit_review": _handle_submit_review,
+    "extract_related_prs": _handle_extract_related_prs,
+}
+
+
+# =============================================================================
+# MCP Protocol Handlers
+# =============================================================================
+
+
+async def _handle_list_tools(
+    ctx: ServerRequestContext,
+    params: PaginatedRequestParams | None,
+) -> ListToolsResult:
+    return ListToolsResult(tools=TOOLS)
+
+
+async def _handle_call_tool(
+    ctx: ServerRequestContext,
+    params: CallToolRequestParams,
+) -> CallToolResult:
+    name = params.name
+    arguments = params.arguments or {}
+
+    handler = TOOL_HANDLERS.get(name)
+    if not handler:
+        return CallToolResult(
+            content=[TextContent(type="text", text=json.dumps({
+                "error": f"Unknown tool: {name}",
+                "error_type": "unknown_tool",
+                "available_tools": list(TOOL_HANDLERS.keys()),
+            }))],
+            is_error=True,
+        )
 
     try:
-        if name == "get_review_rules":
-            rules = _load_rules(
-                include_builtin=arguments.get("include_builtin", True),
-                lang=arguments.get("lang"),
-            )
-            return [TextContent(type="text", text=json.dumps(rules, ensure_ascii=False))]
-
-        # extract_related_prs doesn't need authentication
-        if name == "extract_related_prs":
-            extracted = extract_related_prs(
-                arguments.get("provider", "github"),
-                arguments["description"],
-                arguments.get("host"),
-            )
-            return [TextContent(type="text", text=json.dumps(extracted, ensure_ascii=False))]
-
-        # All other tools need provider authentication
-        provider_type = arguments.get("provider", "github")
-        host = arguments.get("host")
-        provider = get_provider(provider_type, host)
-
-        if name == "get_pr_info":
-            result = await provider.get_pr_info(arguments["repo"], arguments["pr_id"])
-
-        elif name == "get_pr_changes":
-            result = await provider.get_pr_changes(
-                arguments["repo"],
-                arguments["pr_id"],
-                arguments.get("file_extensions"),
-            )
-
-        elif name == "add_inline_comment":
-            result = await provider.add_inline_comment(
-                arguments["repo"],
-                arguments["pr_id"],
-                arguments["file_path"],
-                arguments["line"],
-                arguments["line_type"],
-                arguments["comment"],
-            )
-
-        elif name == "add_pr_comment":
-            result = await provider.add_pr_comment(
-                arguments["repo"],
-                arguments["pr_id"],
-                arguments["comment"],
-            )
-
-        elif name == "batch_add_comments":
-            batch_results: dict[str, Any] = {
-                "inline_success": 0,
-                "inline_failed": 0,
-                "pr_comment_success": False,
-                "errors": [],
-            }
-
-            for comment_data in arguments.get("inline_comments", []):
-                try:
-                    res = await provider.add_inline_comment(
-                        arguments["repo"],
-                        arguments["pr_id"],
-                        comment_data["file_path"],
-                        comment_data["line"],
-                        comment_data["line_type"],
-                        comment_data["comment"],
-                    )
-                    if res.get("success"):
-                        batch_results["inline_success"] += 1
-                    else:
-                        batch_results["inline_failed"] += 1
-                        batch_results["errors"].append(
-                            {
-                                "file": comment_data["file_path"],
-                                "line": comment_data["line"],
-                                "error": res.get("error"),
-                            }
-                        )
-                except Exception as e:
-                    batch_results["inline_failed"] += 1
-                    batch_results["errors"].append(
-                        {
-                            "file": comment_data.get("file_path"),
-                            "error": str(e),
-                        }
-                    )
-
-            if arguments.get("pr_comment"):
-                try:
-                    res = await provider.add_pr_comment(
-                        arguments["repo"],
-                        arguments["pr_id"],
-                        arguments["pr_comment"],
-                    )
-                    batch_results["pr_comment_success"] = res.get("success", False)
-                except Exception as e:
-                    batch_results["errors"].append({"type": "pr_comment", "error": str(e)})
-
-            result = batch_results
-
-        else:
-            return [TextContent(type="text", text=f"Unknown tool: {name}")]
-
-        return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False))]
-
+        result_text = await handler(arguments)
+        return CallToolResult(content=[TextContent(type="text", text=result_text)])
+    except ProviderError as e:
+        return CallToolResult(
+            content=[TextContent(type="text", text=json.dumps({
+                "error": str(e),
+                "error_type": e.error_type,
+                "status_code": e.status_code,
+            }))],
+            is_error=True,
+        )
+    except KeyError as e:
+        return CallToolResult(
+            content=[TextContent(type="text", text=json.dumps({
+                "error": f"Missing required argument: {e}",
+                "error_type": "validation",
+            }))],
+            is_error=True,
+        )
     except Exception as e:
-        return [TextContent(type="text", text=f"Error: {str(e)}")]
+        return CallToolResult(
+            content=[TextContent(type="text", text=json.dumps({
+                "error": str(e),
+                "error_type": "internal",
+            }))],
+            is_error=True,
+        )
+
+
+mcp = Server(
+    "code-review-mcp",
+    on_list_tools=_handle_list_tools,
+    on_call_tool=_handle_call_tool,
+)
 
 
 # =============================================================================
@@ -531,7 +820,6 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
 
 async def run_stdio() -> None:
-    """Run the server using stdio transport."""
     async with stdio_server() as (read_stream, write_stream):
         await mcp.run(
             read_stream,
@@ -541,7 +829,7 @@ async def run_stdio() -> None:
 
 
 def run_sse(host: str = "0.0.0.0", port: int = 8000) -> None:
-    """Run the server using SSE transport."""
+    """Run the server using SSE transport (legacy, prefer streamable-http)."""
     import uvicorn
     from mcp.server.sse import SseServerTransport
     from starlette.applications import Starlette
@@ -577,33 +865,25 @@ def run_sse(host: str = "0.0.0.0", port: int = 8000) -> None:
     uvicorn.run(app, host=host, port=port)
 
 
-def run_websocket(host: str = "0.0.0.0", port: int = 8000) -> None:
-    """Run the server using WebSocket transport."""
+def run_streamable_http(host: str = "0.0.0.0", port: int = 8000) -> None:
+    """Run the server using Streamable HTTP transport (recommended for deployed servers)."""
     import uvicorn
-    from mcp.server.websocket import websocket_server
+    from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
     from starlette.applications import Starlette
     from starlette.responses import JSONResponse
-    from starlette.routing import Route, WebSocketRoute
-    from starlette.websockets import WebSocket
+    from starlette.routing import Mount, Route
 
-    async def handle_websocket(websocket: WebSocket) -> None:
-        await websocket.accept()
-        async with websocket_server(websocket.scope, websocket.receive, websocket.send) as (
-            read_stream,
-            write_stream,
-        ):
-            await mcp.run(
-                read_stream,
-                write_stream,
-                mcp.create_initialization_options(),
-            )
+    session_manager = StreamableHTTPSessionManager(app=mcp, json_response=False, stateless=False)
+
+    async def handle_mcp(request: Any) -> Any:
+        await session_manager.handle_request(request.scope, request.receive, request._send)
 
     async def health_check(request: Any) -> JSONResponse:
         return JSONResponse({"status": "healthy", "server": "code-review-mcp"})
 
     app = Starlette(
         routes=[
-            WebSocketRoute("/ws", endpoint=handle_websocket),
+            Mount("/mcp", app=session_manager.handle_request),
             Route("/health", endpoint=health_check, methods=["GET"]),
         ]
     )
@@ -615,26 +895,26 @@ def run_websocket(host: str = "0.0.0.0", port: int = 8000) -> None:
 @click.option(
     "--transport",
     "-t",
-    type=click.Choice(["stdio", "sse", "websocket"]),
+    type=click.Choice(["stdio", "sse", "streamable-http"]),
     default="stdio",
-    help="Transport mode: stdio (default), sse, or websocket",
+    help="Transport mode: stdio (default), sse (legacy), or streamable-http",
 )
 @click.option(
     "--host",
     "-h",
     default="0.0.0.0",
-    help="Host for SSE/WebSocket server (default: 0.0.0.0)",
+    help="Host for HTTP server (default: 0.0.0.0)",
 )
 @click.option(
     "--port",
     "-p",
     default=8000,
     type=int,
-    help="Port for SSE/WebSocket server (default: 8000)",
+    help="Port for HTTP server (default: 8000)",
 )
 @click.version_option()
 def main(
-    transport: Literal["stdio", "sse", "websocket"],
+    transport: Literal["stdio", "sse", "streamable-http"],
     host: str,
     port: int,
 ) -> None:
@@ -642,23 +922,6 @@ def main(
     Code Review MCP Server.
 
     Enables AI assistants to review GitHub/GitLab pull requests and merge requests.
-
-    Examples:
-
-        # Run with stdio (default, for Cursor/Claude Desktop):
-        code-review-mcp
-
-        # Run with SSE transport:
-        code-review-mcp --transport sse --port 8000
-
-        # Run with WebSocket transport:
-        code-review-mcp --transport websocket --port 8000
-
-    Environment Variables:
-
-        GITHUB_TOKEN: GitHub personal access token
-        GITLAB_TOKEN: GitLab personal access token
-        GITLAB_HOST: GitLab host (default: gitlab.com)
     """
     import asyncio
 
@@ -667,7 +930,7 @@ def main(
     elif transport == "sse":
         run_sse(host, port)
     else:
-        run_websocket(host, port)
+        run_streamable_http(host, port)
 
 
 if __name__ == "__main__":

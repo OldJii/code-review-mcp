@@ -1,9 +1,21 @@
 """Tests for Code Review MCP Server."""
 
+import json
 import tempfile
 from pathlib import Path
 
-from code_review_mcp.server import TOOLS, _load_rules, extract_related_prs
+import pytest
+from mcp.types import CallToolRequestParams
+
+from code_review_mcp.providers import ProviderError, _classify_http_error
+from code_review_mcp.server import (
+    TOOL_HANDLERS,
+    TOOLS,
+    _handle_call_tool,
+    _handle_list_tools,
+    _load_rules,
+    extract_related_prs,
+)
 
 
 class TestExtractRelatedPRs:
@@ -60,9 +72,9 @@ class TestToolDefinitions:
         for tool in TOOLS:
             assert tool.name, "Tool must have a name"
             assert tool.description, "Tool must have a description"
-            assert tool.inputSchema, "Tool must have an inputSchema"
-            assert "type" in tool.inputSchema
-            assert tool.inputSchema["type"] == "object"
+            assert tool.input_schema, "Tool must have an input_schema"
+            assert "type" in tool.input_schema
+            assert tool.input_schema["type"] == "object"
 
     def test_tool_names_are_unique(self) -> None:
         """Test that all tool names are unique."""
@@ -75,13 +87,27 @@ class TestToolDefinitions:
             "get_review_rules",
             "get_pr_info",
             "get_pr_changes",
+            "list_pr_comments",
+            "get_file_content",
+            "get_pr_commits",
             "add_inline_comment",
             "add_pr_comment",
             "batch_add_comments",
+            "resolve_discussion",
+            "submit_review",
             "extract_related_prs",
         }
         actual_tools = {tool.name for tool in TOOLS}
         assert expected_tools == actual_tools
+
+    def test_tools_and_handlers_in_sync(self) -> None:
+        """Every tool in TOOLS must have a handler in TOOL_HANDLERS and vice versa."""
+        tool_names = {tool.name for tool in TOOLS}
+        handler_names = set(TOOL_HANDLERS.keys())
+        assert tool_names == handler_names, (
+            f"Mismatch: tools without handlers={tool_names - handler_names}, "
+            f"handlers without tools={handler_names - tool_names}"
+        )
 
 
 class TestLoadRules:
@@ -137,3 +163,101 @@ class TestLoadRules:
         """Test with nonexistent custom rules directory."""
         rules = _load_rules(include_builtin=False, custom_rules_dir="/nonexistent/path")
         assert rules == []
+
+
+class TestProviderError:
+    """Tests for ProviderError and HTTP error classification."""
+
+    def test_provider_error_fields(self) -> None:
+        err = ProviderError("test error", status_code=401, error_type="auth")
+        assert str(err) == "test error"
+        assert err.status_code == 401
+        assert err.error_type == "auth"
+
+    def test_provider_error_defaults(self) -> None:
+        err = ProviderError("msg")
+        assert err.status_code is None
+        assert err.error_type == "unknown"
+
+    @pytest.mark.parametrize(
+        "code,expected",
+        [
+            (401, "auth"),
+            (403, "forbidden"),
+            (404, "not_found"),
+            (422, "validation"),
+            (429, "rate_limit"),
+            (500, "server"),
+            (503, "server"),
+            (418, "http"),
+        ],
+    )
+    def test_classify_http_error(self, code: int, expected: str) -> None:
+        assert _classify_http_error(code) == expected
+
+
+class TestMcpHandlers:
+    """Tests for MCP protocol handlers."""
+
+    @pytest.mark.asyncio
+    async def test_list_tools_returns_all(self) -> None:
+        result = await _handle_list_tools(None, None)  # type: ignore[arg-type]
+        assert len(result.tools) == len(TOOLS)
+
+    @pytest.mark.asyncio
+    async def test_call_unknown_tool(self) -> None:
+        params = CallToolRequestParams(name="nonexistent_tool", arguments={})
+        result = await _handle_call_tool(None, params)  # type: ignore[arg-type]
+        assert result.is_error is True
+        body = json.loads(result.content[0].text)
+        assert body["error_type"] == "unknown_tool"
+        assert "nonexistent_tool" in body["error"]
+
+    @pytest.mark.asyncio
+    async def test_call_get_review_rules(self) -> None:
+        params = CallToolRequestParams(
+            name="get_review_rules", arguments={"include_builtin": True, "lang": "en"}
+        )
+        result = await _handle_call_tool(None, params)  # type: ignore[arg-type]
+        assert result.is_error is not True
+        rules = json.loads(result.content[0].text)
+        assert isinstance(rules, list)
+        assert len(rules) >= 1
+
+    @pytest.mark.asyncio
+    async def test_call_extract_related_prs(self) -> None:
+        params = CallToolRequestParams(
+            name="extract_related_prs",
+            arguments={
+                "provider": "github",
+                "description": "See https://github.com/foo/bar/pull/42",
+            },
+        )
+        result = await _handle_call_tool(None, params)  # type: ignore[arg-type]
+        assert result.is_error is not True
+        data = json.loads(result.content[0].text)
+        assert data == [{"repo": "foo/bar", "pr_id": 42}]
+
+    @pytest.mark.asyncio
+    async def test_call_missing_required_arg(self) -> None:
+        params = CallToolRequestParams(
+            name="get_pr_info", arguments={"provider": "github"}
+        )
+        result = await _handle_call_tool(None, params)  # type: ignore[arg-type]
+        assert result.is_error is True
+        body = json.loads(result.content[0].text)
+        assert body["error_type"] in ("validation", "internal", "auth")
+
+
+class TestVersionConsistency:
+    """Ensure version is consistent across files."""
+
+    def test_version_match(self) -> None:
+        from code_review_mcp import __version__
+
+        toml_path = Path(__file__).parent.parent / "pyproject.toml"
+        content = toml_path.read_text()
+        import re as re_mod
+        match = re_mod.search(r'^version\s*=\s*"([^"]+)"', content, re_mod.MULTILINE)
+        assert match, "version not found in pyproject.toml"
+        assert __version__ == match.group(1)
